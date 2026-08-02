@@ -31,6 +31,7 @@ npm run cli -- search "Aanu"
 npm run cli -- search --limit 5 --dedupe title "Aanu-Kathara"
 npm run cli -- show sec_ab11f1ed3840bfafc4b84c59
 npm run cli -- get "Aanu-Kathara"
+npm run cli -- facts "Aanu"
 npm run cli -- duplicates --kind title
 npm run cli -- duplicates --kind content
 npm run cli -- entities build
@@ -62,6 +63,11 @@ frontmatter, `Core Idea`, `Summary`, `Overview`, then a review-required first-pa
 fallback. Wikilinks become only `source_links_to` relationships; their presence does not imply
 stronger claims such as `caused`, `located_in`, or `created_by`. Ambiguous and unresolved links
 remain queued rather than being guessed.
+
+Bullets under an entity's `Known Facts` heading become separate assertions with source section,
+line range, source hash, canon status, knowledge status, and confidence. A small allowlist of
+unambiguous structured frontmatter fields can create `located_in`, `preceded_by`, `followed_by`,
+or `associated_with` relationships. No relationship is strengthened from prose proximity.
 
 The API binds to `127.0.0.1:8765` by default:
 

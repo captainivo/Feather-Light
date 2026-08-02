@@ -10,6 +10,32 @@ const preferredHeadings = new Map([
   ["overview", { priority: 4, confidence: 0.94 }],
 ]);
 
+const structuredRelations = new Map<string, string>([
+  ["region", "located_in"],
+  ["planet", "located_in"],
+  ["world", "located_in"],
+  ["location", "located_in"],
+  ["home", "located_in"],
+  ["current_location", "located_in"],
+  ["continent", "located_in"],
+  ["preceded_by", "preceded_by"],
+  ["followed_by", "followed_by"],
+  ["people", "associated_with"],
+  ["civilization", "associated_with"],
+  ["system", "associated_with"],
+  ["artifact", "associated_with"],
+  ["species", "associated_with"],
+  ["origin", "associated_with"],
+  ["descended_from", "associated_with"],
+  ["declared_by", "associated_with"],
+  ["associated_avor", "associated_with"],
+  ["paired_city", "associated_with"],
+  ["related_character", "associated_with"],
+  ["related", "associated_with"],
+  ["nearby", "associated_with"],
+  ["moon", "associated_with"],
+]);
+
 function cleanMarkdown(value: string): string {
   return value
     .replaceAll(/^#{1,6}\s+.*$/gm, "")
@@ -38,6 +64,41 @@ function targetLabel(target: string): string {
   return lastSegment.replace(/\.md$/i, "").trim();
 }
 
+function structuredTargets(value: unknown): string[] {
+  const values = Array.isArray(value) ? value : typeof value === "string" ? [value] : [];
+  const targets: string[] = [];
+  for (const item of values) {
+    if (typeof item !== "string") continue;
+    const links = [...item.matchAll(/\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]/g)].map((match) => targetLabel(match[1]!));
+    if (links.length > 0) targets.push(...links);
+    else targets.push(...item.split(/[,;]/).map((part) => part.trim()).filter(Boolean));
+  }
+  return [...new Set(targets)];
+}
+
+function bulletClaims(value: string): string[] {
+  return value
+    .replaceAll(/^#{1,6}\s+.*$/gm, "")
+    .split("\n")
+    .map((line) => line.match(/^\s*[-*+]\s+(.+?)\s*$/)?.[1]?.trim())
+    .filter((line): line is string => Boolean(line))
+    .map(cleanMarkdown)
+    .filter((line) => line.length >= 10);
+}
+
+function knowledgeStatus(canonStatus: unknown): {
+  status: "known" | "unconfirmed" | "reported" | "speculation" | "contested" | "unknown";
+  confidence: number;
+} {
+  const normalized = typeof canonStatus === "string" ? canonStatus.toLocaleLowerCase() : "";
+  if (normalized.includes("conflict") || normalized.includes("contest")) return { status: "contested", confidence: 0.6 };
+  if (normalized.includes("unconfirm")) return { status: "unconfirmed", confidence: 0.7 };
+  if (normalized.includes("speculat")) return { status: "speculation", confidence: 0.4 };
+  if (normalized.includes("develop") || normalized.includes("draft")) return { status: "unconfirmed", confidence: 0.75 };
+  if (normalized.includes("canon") || normalized.includes("confirm")) return { status: "known", confidence: 1 };
+  return { status: "unknown", confidence: 0.65 };
+}
+
 export function rebuildKnowledge(database: FeatherDatabase): {
   entities: number;
   aliases: number;
@@ -47,12 +108,15 @@ export function rebuildKnowledge(database: FeatherDatabase): {
   relationships: number;
   unresolvedLinks: number;
   ambiguousLinks: number;
+  assertions: number;
+  typedRelationships: number;
 } {
   const entityBuild = rebuildEntities(database);
   database.transaction(() => {
     database.prepare("DELETE FROM unresolved_entity_links").run();
     database.prepare("DELETE FROM relationships").run();
     database.prepare("DELETE FROM definitions").run();
+    database.prepare("DELETE FROM assertions").run();
 
     const entities = database.prepare(`
       SELECT e.entity_id AS entityId, e.canonical_label AS canonicalLabel,
@@ -144,8 +208,8 @@ export function rebuildKnowledge(database: FeatherDatabase): {
     const insertRelationship = database.prepare(`
       INSERT OR IGNORE INTO relationships(
         relationship_id, source_entity_id, relation_type, target_entity_id,
-        source_section_id, confidence
-      ) VALUES (?, ?, 'source_links_to', ?, ?, 1.0)
+        source_section_id, confidence, extraction_rule
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
     const insertUnresolved = database.prepare(`
       INSERT OR IGNORE INTO unresolved_entity_links(
@@ -170,8 +234,11 @@ export function rebuildKnowledge(database: FeatherDatabase): {
           insertRelationship.run(
             stableId("rel", `${entity.entityId}:${targetId}:${link.sectionId}`),
             entity.entityId,
+            "source_links_to",
             targetId,
             link.sectionId,
+            1,
+            "wikilink",
           );
         } else {
           const status = matches.length > 1 ? "ambiguous" : "unresolved";
@@ -183,6 +250,53 @@ export function rebuildKnowledge(database: FeatherDatabase): {
             normalized,
             status,
             JSON.stringify(matches),
+          );
+        }
+      }
+
+      const frontmatter = JSON.parse(entity.frontmatterJson) as Record<string, unknown>;
+      for (const [field, relationType] of structuredRelations) {
+        for (const label of structuredTargets(frontmatter[field])) {
+          const normalized = normalizeEntityLabel(label);
+          const matches = [...(names.get(normalized) ?? [])];
+          if (matches.length !== 1 || matches[0] === entity.entityId) continue;
+          const targetId = matches[0]!;
+          insertRelationship.run(
+            stableId("rel", `${entity.entityId}:${relationType}:${targetId}:frontmatter.${field}`),
+            entity.entityId,
+            relationType,
+            targetId,
+            null,
+            1,
+            `frontmatter.${field}`,
+          );
+        }
+      }
+
+      const assertionStatus = knowledgeStatus(frontmatter.canon);
+      const knownFactSections = database.prepare(`
+        SELECT section_id AS sectionId, plain_text AS plainText
+        FROM source_sections
+        WHERE source_file_id=? AND lower(heading_path) LIKE '% > known facts'
+      `).all(entity.sourceFileId) as Array<{ sectionId: string; plainText: string }>;
+      const insertAssertion = database.prepare(`
+        INSERT INTO assertions(
+          assertion_id, subject_entity_id, predicate, object_entity_id,
+          claim_text, source_section_id, canon_status, knowledge_status,
+          confidence, review_status, extraction_rule
+        ) VALUES (?, ?, 'archive_claim', ?, ?, ?, ?, ?, ?, 'accepted', 'heading.known_facts.bullet')
+      `);
+      for (const section of knownFactSections) {
+        for (const [index, claim] of bulletClaims(section.plainText).entries()) {
+          insertAssertion.run(
+            stableId("ast", `${entity.entityId}:${section.sectionId}:${index}:${claim}`),
+            entity.entityId,
+            null,
+            claim,
+            section.sectionId,
+            typeof frontmatter.canon === "string" ? frontmatter.canon : null,
+            assertionStatus.status,
+            assertionStatus.confidence,
           );
         }
       }
@@ -199,6 +313,8 @@ export function rebuildKnowledge(database: FeatherDatabase): {
     relationships: count("relationships"),
     unresolvedLinks: count("unresolved_entity_links", "WHERE resolution_status='unresolved'"),
     ambiguousLinks: count("unresolved_entity_links", "WHERE resolution_status='ambiguous'"),
+    assertions: count("assertions"),
+    typedRelationships: count("relationships", "WHERE relation_type <> 'source_links_to'"),
   };
 }
 
@@ -243,12 +359,44 @@ export function getEntityBrief(database: FeatherDatabase, query: string, relatio
       s.heading_path AS sourceHeading, s.start_line AS startLine, s.end_line AS endLine
     FROM relationships r
     JOIN entities target ON target.entity_id=r.target_entity_id
-    JOIN source_sections s ON s.section_id=r.source_section_id
+    LEFT JOIN source_sections s ON s.section_id=r.source_section_id
     WHERE r.source_entity_id=?
-    GROUP BY r.target_entity_id
+      AND r.relationship_id = (
+        SELECT r2.relationship_id FROM relationships r2
+        WHERE r2.source_entity_id=r.source_entity_id
+          AND r2.target_entity_id=r.target_entity_id
+        ORDER BY CASE WHEN r2.relation_type='source_links_to' THEN 1 ELSE 0 END,
+          r2.confidence DESC, r2.relationship_id
+        LIMIT 1
+      )
     ORDER BY target.canonical_label LIMIT ?
   `).all(entityId, relationLimit);
   const relationCount = (database.prepare("SELECT count(DISTINCT target_entity_id) AS count FROM relationships WHERE source_entity_id=?").get(entityId) as { count: number }).count;
   return { status: "ok", entity, definition, relationships, relationCount, truncated: relationCount > relationLimit };
 }
 
+export function getEntityAssertions(database: FeatherDatabase, query: string, limit = 25): object {
+  const matches = resolveEntity(database, query);
+  if (matches.length === 0) return { status: "not_found", query };
+  if (matches.length > 1) return { status: "ambiguous", query, entityIds: matches };
+  const entityId = matches[0]!;
+  const entity = database.prepare(`
+    SELECT entity_id AS entityId, canonical_label AS canonicalLabel,
+      entity_type AS entityType FROM entities WHERE entity_id=?
+  `).get(entityId);
+  const assertions = database.prepare(`
+    SELECT a.assertion_id AS assertionId, a.predicate, a.claim_text AS claimText,
+      a.canon_status AS canonStatus, a.knowledge_status AS knowledgeStatus,
+      a.confidence, a.review_status AS reviewStatus,
+      s.section_id AS sourceSectionId, s.heading_path AS sourceHeading,
+      s.start_line AS startLine, s.end_line AS endLine,
+      f.relative_path AS relativePath, f.content_hash AS sourceHash
+    FROM assertions a
+    JOIN source_sections s ON s.section_id=a.source_section_id
+    JOIN source_files f ON f.source_file_id=s.source_file_id
+    WHERE a.subject_entity_id=?
+    ORDER BY s.ordinal, a.assertion_id LIMIT ?
+  `).all(entityId, limit);
+  const total = (database.prepare("SELECT count(*) AS count FROM assertions WHERE subject_entity_id=?").get(entityId) as { count: number }).count;
+  return { status: "ok", entity, assertions, total, truncated: total > limit };
+}

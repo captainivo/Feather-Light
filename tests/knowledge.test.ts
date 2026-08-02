@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { Config } from "../src/config.js";
 import { migrate, openDatabase } from "../src/database.js";
 import { ingestRoot } from "../src/ingest.js";
-import { getEntityBrief, rebuildKnowledge } from "../src/knowledge.js";
+import { getEntityAssertions, getEntityBrief, rebuildKnowledge } from "../src/knowledge.js";
 
 describe("deterministic knowledge projection", () => {
   it("extracts definitions and conservative wikilink relationships", () => {
@@ -14,7 +14,7 @@ describe("deterministic knowledge projection", () => {
     mkdirSync(join(root, "04 - Civilizations and Peoples", "Species"), { recursive: true });
     writeFileSync(
       join(root, "03 - Characters", "Aanu.md"),
-      "---\ntype: character\naliases: [The Architect]\n---\n# Aanu\n## Core Idea\n**Aanu** guides the [[Thorin]] and remembers [[Unknown City]].\n",
+      "---\ntype: character\naliases: [The Architect]\ncanon: unconfirmed\npeople: '[[Thorin]]'\n---\n# Aanu\n## Core Idea\n**Aanu** guides the [[Thorin]] and remembers [[Unknown City]].\n## Known Facts\n- Aanu guides the Thorin.\n",
       "utf8",
     );
     writeFileSync(
@@ -35,18 +35,24 @@ describe("deterministic knowledge projection", () => {
     expect(rebuildKnowledge(database)).toMatchObject({
       entities: 2,
       definitions: 2,
-      relationships: 1,
+      relationships: 2,
       unresolvedLinks: 1,
       ambiguousLinks: 0,
+      assertions: 1,
+      typedRelationships: 1,
     });
     expect(getEntityBrief(database, "The Architect")).toMatchObject({
       status: "ok",
       entity: { canonicalLabel: "Aanu", entityType: "Person" },
       definition: { text: "Aanu guides the Thorin and remembers Unknown City." },
       relationCount: 1,
-      relationships: [{ relationType: "source_links_to", targetLabel: "Thorin" }],
+      relationships: [{ relationType: "associated_with", targetLabel: "Thorin" }],
+    });
+    expect(getEntityAssertions(database, "Aanu")).toMatchObject({
+      status: "ok",
+      total: 1,
+      assertions: [{ claimText: "Aanu guides the Thorin.", knowledgeStatus: "unconfirmed" }],
     });
     database.close();
   });
 });
-

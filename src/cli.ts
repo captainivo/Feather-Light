@@ -11,7 +11,7 @@ import {
 } from "./entities.js";
 import { getSection } from "./evidence.js";
 import { ingestRoot } from "./ingest.js";
-import { getEntityBrief, rebuildKnowledge } from "./knowledge.js";
+import { getEntityAssertions, getEntityBrief, rebuildKnowledge } from "./knowledge.js";
 import { search, type DedupeMode, type SearchResult } from "./search.js";
 import { buildServer } from "./server.js";
 import { indexStatus } from "./status.js";
@@ -24,6 +24,7 @@ Usage:
   npm run cli -- search [--limit N] [--dedupe MODE] <words>
   npm run cli -- show <SECTION_ID>
   npm run cli -- get [--relations N] <ENTITY_ID_OR_EXACT_NAME>
+  npm run cli -- facts [--limit N] <ENTITY_ID_OR_EXACT_NAME>
   npm run cli -- duplicates [--kind content|title] [--limit N]
   npm run cli -- entities build
   npm run cli -- entities list [--type Person|Place|...] [--limit N]
@@ -73,7 +74,7 @@ async function main(): Promise<void> {
   let closeDatabase = true;
   try {
     if (command === "migrate") {
-      console.log(JSON.stringify({ status: "ok", schemaVersion: 3 }));
+      console.log(JSON.stringify({ status: "ok", schemaVersion: 4 }));
     } else if (command === "status") {
       const { values } = parseArgs({ args: rest, options: { json: { type: "boolean", default: false } } });
       const status = indexStatus(database) as {
@@ -88,6 +89,8 @@ async function main(): Promise<void> {
           definitions: number;
           relationships: number;
           unresolvedEntityLinks: number;
+          assertions: number;
+          typedRelationships: number;
         };
         roots: Array<{ rootId: string; displayName: string; lastCompleteIngestId: string | null }>;
         lastRun: { status: string; recordsChanged: number; finishedAt: string } | null;
@@ -98,6 +101,7 @@ async function main(): Promise<void> {
         console.log(`Files: ${status.counts.sourceFiles} · Sections: ${status.counts.sourceSections} · Wikilinks: ${status.counts.wikilinks}`);
         console.log(`Entities: ${status.counts.entities} · Aliases: ${status.counts.entityAliases} · Duplicate candidates: ${status.counts.entityDuplicateCandidates}`);
         console.log(`Definitions: ${status.counts.definitions} · Relationships: ${status.counts.relationships} · Unresolved links: ${status.counts.unresolvedEntityLinks}`);
+        console.log(`Assertions: ${status.counts.assertions} · Typed relationships: ${status.counts.typedRelationships}`);
         for (const root of status.roots) console.log(`Root: ${root.displayName} (${root.rootId}) · last complete: ${root.lastCompleteIngestId ?? "never"}`);
         if (status.lastRun) console.log(`Last run: ${status.lastRun.status} · ${status.lastRun.recordsChanged} changed · ${status.lastRun.finishedAt}`);
       }
@@ -174,6 +178,37 @@ async function main(): Promise<void> {
         if (result.relationships?.length) {
           console.log(`\nDirect relationships (${result.relationCount}${result.truncated ? ", truncated" : ""}):`);
           for (const relationship of result.relationships) console.log(`  ${relationship.relationType} → ${relationship.targetLabel} (${relationship.targetType})`);
+        }
+      }
+    } else if (command === "facts") {
+      const { values, positionals } = parseArgs({
+        args: rest,
+        allowPositionals: true,
+        options: {
+          limit: { type: "string", short: "n" },
+          json: { type: "boolean", default: false },
+        },
+      });
+      const query = positionals.join(" ").trim();
+      const result = getEntityAssertions(database, query, positiveInteger(values.limit, 25)) as {
+        status: string;
+        entity?: { canonicalLabel: string; entityType: string };
+        assertions?: Array<{
+          assertionId: string; claimText: string; knowledgeStatus: string;
+          confidence: number; relativePath: string; sourceHeading: string;
+          startLine: number; endLine: number;
+        }>;
+        total?: number;
+        truncated?: boolean;
+      };
+      if (values.json) console.log(JSON.stringify(result, null, 2));
+      else if (result.status !== "ok") console.log(`${result.status}: ${query}`);
+      else {
+        console.log(`${result.entity!.canonicalLabel} · ${result.entity!.entityType} · ${result.total} assertions${result.truncated ? " (truncated)" : ""}`);
+        for (const assertion of result.assertions ?? []) {
+          console.log(`\n${assertion.assertionId} · ${assertion.knowledgeStatus} · ${(assertion.confidence * 100).toFixed(0)}%`);
+          console.log(assertion.claimText);
+          console.log(`${assertion.relativePath} · ${assertion.sourceHeading}:${assertion.startLine}-${assertion.endLine}`);
         }
       }
     } else if (command === "duplicates") {
