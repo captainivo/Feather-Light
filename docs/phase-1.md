@@ -1,37 +1,36 @@
 # Phase 1 — Westpole archive retrieval
 
-## Current milestone
+## Source boundary
 
-Milestone 1 establishes the repository and local service without opening the archive.
+The first source is the canonical `The Westpole` archive. It has its own root identity and is
+read-only even when the underlying filesystem is writable. A notebook working copy may be
+added later only as a separate root; records from distinct roots must never silently merge.
 
-Included:
+Initial workstation discovery found 394 Markdown files totaling about 1.9 MB at:
 
-- Python 3.11 project managed by `uv`;
-- FastAPI application with `/health` and `/v1/status`;
-- validated localhost-only, read-only configuration defaults;
-- SQLite/Alembic migration baseline;
-- bounded response settings and machine-readable error foundation;
-- structured operational logging that does not include archive prose;
-- pytest and Ruff checks locally and in GitHub Actions.
+```text
+/Users/captainivo/Documents/Mithra Library/The Westpole
+```
 
-## Initial decisions
+Production deployment is expected to configure the equivalent SMB-mounted path rather than
+copy this workstation path into business logic.
 
-The project-plan defaults are adopted until benchmark evidence requires a change:
+## Current implementation
 
-1. Index the Westpole working copy as the first and only source root.
-2. Keep source roots read-only and identify every root independently.
-3. Omit embeddings from the MVP.
-4. Bind the API to localhost.
-5. Keep generated definitions unpreferred until reviewed.
-6. Use deterministic SQLite ingestion before enabling Graphiti extraction.
-7. Keep emotional state and weather outside Phase 1.
+- TypeScript on Node.js 22.
+- SQLite manifest, provenance, sections, wikilinks, and FTS5.
+- Explicit SQL migrations.
+- Complete/partial/failed ingest-run states.
+- Content hashes and stable source/section identifiers.
+- Heading and exact line boundaries for evidence retrieval.
+- Bounded HTTP and CLI search.
 
-The production source path remains configuration, never application code. It is deliberately
-absent from active defaults until Milestone 0 confirms the mounted root and benchmarks it.
+Graphiti remains a future, isolated Python integration because its official implementation is
+Python-native. Deterministic TypeScript ingestion remains usable if that integration is absent.
 
-## Next work
+## Deferred boundaries
 
-Before Milestone 2, confirm the accessible Westpole working-copy path and assemble a reviewed
-benchmark question set. Milestone 2 then adds safe discovery, complete/partial scan semantics,
-hashing, Markdown parsing, and exact source-section provenance.
+Emotional state, weather, autobiographical memory, and relationship state are not part of this
+archive index. Generated summaries and contaminated historical Honcho representations are not
+migration inputs.
 

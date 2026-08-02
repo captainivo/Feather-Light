@@ -1,53 +1,48 @@
 # Feather-Light
 
-Feather-Light is a compact, provenance-preserving retrieval API for the Westpole archive.
-It will maintain a deterministic SQLite search/provenance index and a semantic knowledge
-graph while treating the Markdown archive as read-only canonical source material.
+Feather-Light is a TypeScript service that builds a compact, provenance-preserving index of
+the Westpole archive. Markdown remains authoritative and is always treated as read-only.
 
-This repository currently contains the Phase 1 service skeleton (Milestone 1). It does not
-open or ingest archive files yet.
+The current Phase 1 slice discovers Markdown safely, records a content-hashed manifest,
+parses frontmatter and heading-bounded sections, extracts wikilinks, builds an FTS5 index,
+and exposes bounded status and search operations.
 
-## Quick start
-
-```bash
-uv sync --extra dev
-uv run alembic upgrade head
-uv run feather-light serve
-```
-
-The service binds to `127.0.0.1:8765` by default. Check it with:
+## Setup
 
 ```bash
-curl http://127.0.0.1:8765/health
-curl http://127.0.0.1:8765/v1/status
+npm install
+cp config.example.yaml config.yaml
+npm run db:migrate
+npm run ingest
+npm test
 ```
 
-## Configuration
+For this workstation, `config.yaml` points to the canonical local archive at
+`/Users/captainivo/Documents/Mithra Library/The Westpole`. The file is ignored by Git so
+machine-specific paths are not published.
 
-Settings use the `FEATHER_LIGHT_` environment prefix. Nested fields use `__`:
+## Commands
 
 ```bash
-export FEATHER_LIGHT_SERVER__PORT=9000
-export FEATHER_LIGHT_LOG_LEVEL=DEBUG
+npm run db:migrate
+npm run ingest
+npm run ingest:dry
+npm run search -- "Aanu"
+npm run dev
 ```
 
-Archive roots are intentionally empty by default. A checked-in example is available at
-`config.example.yaml`; YAML file loading will be added with the ingestion milestone.
+The API binds to `127.0.0.1:8765` by default:
 
-The current implementation decisions and milestone boundary are recorded in
-`docs/phase-1.md`.
+- `GET /health` reports process health only.
+- `GET /v1/status` reports index freshness and record counts.
+- `POST /v1/search` searches titles, headings, and section text with bounded results.
 
-## Development
+## Safety guarantees
 
-```bash
-uv run pytest
-uv run ruff check .
-uv run ruff format --check .
-```
+- Archive roots must be explicitly configured as read-only.
+- Symlinks, special files, hidden application state, and unsupported files are skipped.
+- Source files are opened only for reading.
+- Missing or incomplete roots never trigger mass deletion.
+- Indexed content is stored only under the local `state/` directory.
+- Search results include stable source IDs, relative paths, headings, line ranges, and hashes.
 
-## Phase 1 boundaries
-
-- The source archive is read-only and remains authoritative.
-- Ordinary retrieval is compact; evidence is fetched explicitly.
-- Contradictory claims remain separate assertions.
-- Phase 2 emotional state and Phase 3 weather are out of scope.

@@ -1,0 +1,36 @@
+{
+  "name": "feather-light",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit && eslint .",
+    "db:migrate": "node --import tsx src/cli.ts migrate",
+    "dev": "tsx watch src/cli.ts serve",
+    "ingest": "node --import tsx src/cli.ts ingest",
+    "ingest:dry": "node --import tsx src/cli.ts ingest --dry-run",
+    "search": "node --import tsx src/cli.ts search",
+    "start": "node dist/src/cli.js serve",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.2.0",
+    "fastify": "^5.5.0",
+    "yaml": "^2.8.1",
+    "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.34.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^24.3.0",
+    "eslint": "^9.34.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.41.0",
+    "vitest": "^3.2.4"
+  }
+}

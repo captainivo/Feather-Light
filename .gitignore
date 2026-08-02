@@ -1,13 +1,11 @@
 .DS_Store
 .env
-.pytest_cache/
-.ruff_cache/
-.venv/
-*.egg-info/
+config.yaml
+coverage/
 __pycache__/
 dist/
-htmlcov/
+node_modules/
+state/
 *.sqlite3
 *.sqlite3-shm
 *.sqlite3-wal
-
