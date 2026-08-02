@@ -7,6 +7,7 @@ APP_DIR="/home/mithra/feather-light"
 CONFIG_DIR="/home/mithra/.config/feather-light"
 STATE_DIR="/home/mithra/.hermes/mithra/feather-light/state"
 PLUGIN_DIR="/home/mithra/.hermes/plugins/feather-light"
+CONTEXT_PLUGIN_DIR="/home/mithra/.hermes/plugins/mithra-context-telemetry"
 SYSTEMD_DIR="/home/mithra/.config/systemd/user"
 HERMES_PY="/home/mithra/.hermes/hermes-agent/venv/bin/python"
 
@@ -37,8 +38,14 @@ install -m 0644 deployment/systemd/feather-light-ingest.timer "$SYSTEMD_DIR/feat
 install -m 0644 deployment/hermes-plugin/plugin.yaml "$PLUGIN_DIR/plugin.yaml"
 install -m 0644 deployment/hermes-plugin/__init__.py "$PLUGIN_DIR/__init__.py"
 
+if [[ -d "$CONTEXT_PLUGIN_DIR" ]]; then
+  install -m 0644 deployment/hermes-compat/world_state_tool.py "$CONTEXT_PLUGIN_DIR/world_state_tool.py"
+  install -m 0644 deployment/hermes-compat/emotional_reflection_tool.py "$CONTEXT_PLUGIN_DIR/emotional_reflection_tool.py"
+fi
+
 systemctl --user daemon-reload
 systemctl --user enable --now feather-light.service feather-light-ingest.timer
+systemctl --user restart feather-light.service
 systemctl --user start feather-light-ingest.service
 
 if [[ -x "$HERMES_PY" ]]; then

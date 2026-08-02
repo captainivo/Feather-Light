@@ -32,6 +32,11 @@ new Hermes sessions as `feather_light`. If Hermes uses a session tool allowlist,
 its knowledge/lore profile and remove the legacy direct archive scanner only after a successful
 acceptance test.
 
+The installer also replaces the existing `mithra_current_state` and
+`mithra_emotional_reflection` implementations with compatibility shims. Their public tool names
+and semantics remain unchanged, but all access now passes through Feather-Light. The Aauthora
+service on port 8421 remains the private simulation and persistence engine during this migration.
+
 ## Verify
 
 ```bash

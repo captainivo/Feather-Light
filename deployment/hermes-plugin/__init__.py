@@ -18,15 +18,15 @@ SCHEMA = {
     "description": (
         "Search and inspect the canonical Westpole archive through compact, sourced, "
         "read-only records. Use for Aauthora people, places, things, lore facts, direct "
-        "relationships, and chronology. Request facts only when the brief entity record "
-        "is insufficient."
+        "relationships, chronology, current weather/life state, and private deliberate "
+        "emotional reflection. Request facts only when the brief entity record is insufficient."
     ),
     "parameters": {
         "type": "object",
         "properties": {
             "operation": {
                 "type": "string",
-                "enum": ["search", "get", "facts", "timeline", "status"],
+                "enum": ["search", "get", "facts", "timeline", "status", "current_state", "emotional_reflection"],
             },
             "query": {
                 "type": "string",
@@ -45,6 +45,17 @@ SCHEMA = {
             "allSources": {
                 "type": "boolean",
                 "description": "For timeline only, include duplicate source occurrences.",
+            },
+            "recordConversation": {
+                "type": "boolean",
+                "description": "For current_state, record this conversation activity; defaults true.",
+            },
+            "reflection": {
+                "type": "object",
+                "description": (
+                    "For emotional_reflection: a deliberate record_event, calibrate_cue, or "
+                    "retract_event payload. Never infer feelings from weather or bodily state."
+                ),
             },
         },
         "required": ["operation"],
@@ -87,6 +98,8 @@ def handle(args: dict[str, Any] | str, **_kwargs: Any) -> str:
     payload.setdefault("limit", 5)
     if payload.get("operation") == "search":
         payload.setdefault("dedupe", "file")
+    if payload.get("operation") == "current_state":
+        payload.setdefault("recordConversation", True)
     return json.dumps(_request(payload), ensure_ascii=False, separators=(",", ":"))
 
 
@@ -108,4 +121,3 @@ def register(ctx: Any) -> None:
         description="Compact read-only Westpole archive retrieval",
         emoji="🪶",
     )
-

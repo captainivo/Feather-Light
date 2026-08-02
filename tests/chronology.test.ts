@@ -30,6 +30,7 @@ describe("relative chronology", () => {
     const config: Config = {
       server: { host: "127.0.0.1", port: 8765 },
       database: { path: join(base, "index.sqlite3") },
+      aauthora: { baseUrl: "http://127.0.0.1:8421", timeoutMs: 2_000 },
       archiveRoots: [{ rootId: "westpole", displayName: "Westpole", path: root, readOnly: true, enabled: true }],
       limits: { maxFileBytes: 1_048_576, searchResults: 10, excerptCharacters: 1_200, responseCharacters: 16_000 },
     };

@@ -1,7 +1,6 @@
 name: feather-light
-version: "0.1.0"
-description: "Bounded read-only Westpole retrieval through Feather-Light."
+version: "0.2.0"
+description: "Bounded Westpole retrieval, current world state, and deliberate emotional reflection through Feather-Light."
 author: Feather-Light Project
 provides_tools:
   - feather_light
-

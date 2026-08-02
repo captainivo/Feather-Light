@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import { z } from "zod";
+import { currentState, emotionalReflectionSchema, reflectEmotion } from "./aauthora.js";
 import { queryChronology } from "./chronology.js";
 import type { Config } from "./config.js";
 import type { FeatherDatabase } from "./database.js";
@@ -53,6 +54,8 @@ export function buildServer(config: Config, database: FeatherDatabase) {
       allSources: z.boolean().default(false),
     }),
     z.object({ operation: z.literal("status") }),
+    z.object({ operation: z.literal("current_state"), recordConversation: z.boolean().default(true) }),
+    z.object({ operation: z.literal("emotional_reflection"), reflection: emotionalReflectionSchema }),
   ]);
   app.post("/v1/query", async (request, reply) => {
     const parsed = querySchema.safeParse(request.body);
@@ -61,6 +64,20 @@ export function buildServer(config: Config, database: FeatherDatabase) {
     }
     const input = parsed.data;
     if (input.operation === "status") return indexStatus(database);
+    if (input.operation === "current_state") {
+      try {
+        return await currentState(config, input.recordConversation);
+      } catch (error) {
+        return reply.code(503).send({ status: "unavailable", error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    if (input.operation === "emotional_reflection") {
+      try {
+        return { status: "ok", result: await reflectEmotion(config, input.reflection) };
+      } catch (error) {
+        return reply.code(503).send({ status: "unavailable", error: error instanceof Error ? error.message : String(error) });
+      }
+    }
     if (input.operation === "search") {
       return {
         status: "ok",

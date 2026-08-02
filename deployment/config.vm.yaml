@@ -5,6 +5,10 @@ server:
 database:
   path: "/home/mithra/.hermes/mithra/feather-light/state/feather-light.sqlite3"
 
+aauthora:
+  baseUrl: "http://127.0.0.1:8421"
+  timeoutMs: 2000
+
 archiveRoots:
   - rootId: "westpole-canonical"
     displayName: "The Westpole"
@@ -17,4 +21,3 @@ limits:
   searchResults: 10
   excerptCharacters: 1200
   responseCharacters: 16000
-

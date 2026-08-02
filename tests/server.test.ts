@@ -6,6 +6,7 @@ import { buildServer } from "../src/server.js";
 const config: Config = {
   server: { host: "127.0.0.1", port: 8765 },
   database: { path: ":memory:" },
+  aauthora: { baseUrl: "http://127.0.0.1:8421", timeoutMs: 2_000 },
   archiveRoots: [],
   limits: {
     maxFileBytes: 1_048_576,
