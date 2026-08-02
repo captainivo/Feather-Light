@@ -32,6 +32,9 @@ npm run cli -- search --limit 5 --dedupe title "Aanu-Kathara"
 npm run cli -- show sec_ab11f1ed3840bfafc4b84c59
 npm run cli -- duplicates --kind title
 npm run cli -- duplicates --kind content
+npm run cli -- entities build
+npm run cli -- entities list --type Person
+npm run cli -- entities duplicates
 npm run dev
 ```
 
@@ -48,6 +51,9 @@ Search deduplication is caller-controlled:
 Duplicate source records are never deleted or merged automatically. The CLI reports them so
 later entity resolution can preserve their separate provenance and select or review a preferred
 record explicitly.
+
+A non-dry-run ingest automatically rebuilds the deterministic entity projection. `entities build`
+is also available when testing classification rules without rescanning the archive.
 
 The API binds to `127.0.0.1:8765` by default:
 
