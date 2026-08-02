@@ -38,7 +38,12 @@ describe("ingestion", () => {
     migrate(database);
     const result = ingestRoot(database, config, "westpole");
     expect(result).toMatchObject({ status: "complete", filesSeen: 1, filesOpened: 1, recordsChanged: 1 });
-    expect(search(database, config, "Aanu")[0]).toMatchObject({ title: "Aanu", relativePath: "Aanu.md", startLine: 4 });
+    expect(search(database, config, "Aanu")[0]).toMatchObject({
+      title: "Aanu",
+      relativePath: "Aanu.md",
+      headingPath: "Aanu > Core Idea",
+      startLine: 5,
+    });
     expect(readFileSync(note)).toEqual(before.bytes);
     expect(statSync(note, { bigint: true }).mtimeNs).toBe(before.mtime);
     database.close();

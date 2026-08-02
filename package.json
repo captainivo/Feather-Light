@@ -9,6 +9,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit && eslint .",
+    "cli": "node --import tsx src/cli.ts",
     "db:migrate": "node --import tsx src/cli.ts migrate",
     "dev": "tsx watch src/cli.ts serve",
     "ingest": "node --import tsx src/cli.ts ingest",

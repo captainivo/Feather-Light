@@ -24,12 +24,30 @@ machine-specific paths are not published.
 ## Commands
 
 ```bash
-npm run db:migrate
-npm run ingest
-npm run ingest:dry
-npm run search -- "Aanu"
+npm run cli -- status
+npm run cli -- ingest --dry-run
+npm run cli -- ingest
+npm run cli -- search "Aanu"
+npm run cli -- search --limit 5 --dedupe title "Aanu-Kathara"
+npm run cli -- show sec_ab11f1ed3840bfafc4b84c59
+npm run cli -- duplicates --kind title
+npm run cli -- duplicates --kind content
 npm run dev
 ```
+
+Run `npm run cli -- help` for the complete command summary. Add `--json` to `status`,
+`search`, `show`, or `duplicates` when scripting.
+
+Search deduplication is caller-controlled:
+
+- `file` returns one best section from each source file and is the default;
+- `title` collapses files with the same normalized title;
+- `content` collapses byte-identical source files;
+- `none` returns matching sections without collapsing them.
+
+Duplicate source records are never deleted or merged automatically. The CLI reports them so
+later entity resolution can preserve their separate provenance and select or review a preferred
+record explicitly.
 
 The API binds to `127.0.0.1:8765` by default:
 
@@ -46,3 +64,9 @@ The API binds to `127.0.0.1:8765` by default:
 - Indexed content is stored only under the local `state/` directory.
 - Search results include stable source IDs, relative paths, headings, line ranges, and hashes.
 
+## Entity boundary
+
+The current index does not claim that every title is a resolved person, place, or thing. The
+next deterministic entity pass will use explicit frontmatter, directory conventions, titles,
+aliases, and wikilinks. Ambiguous prose extraction and duplicate resolution may use a local LLM
+later, but model output will remain a provenance-bearing proposal rather than automatic canon.

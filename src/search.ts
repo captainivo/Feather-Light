@@ -15,30 +15,73 @@ export interface SearchResult {
   score: number;
 }
 
+export type DedupeMode = "none" | "file" | "title" | "content";
+
+export interface SearchOptions {
+  limit?: number;
+  dedupe?: DedupeMode;
+}
+
 function ftsQuery(query: string): string {
   const terms = query.match(/[\p{L}\p{N}'’-]+/gu)?.filter((term) => term.length > 1) ?? [];
   if (terms.length === 0) throw new Error("query requires searchable terms");
   return terms.map((term) => `"${term.replaceAll('"', '""')}"`).join(" AND ");
 }
 
-export function search(database: FeatherDatabase, config: Config, query: string, requestedLimit?: number): SearchResult[] {
-  const limit = Math.min(requestedLimit ?? config.limits.searchResults, config.limits.searchResults);
+export function search(
+  database: FeatherDatabase,
+  config: Config,
+  query: string,
+  options: SearchOptions = {},
+): SearchResult[] {
+  const limit = Math.min(options.limit ?? config.limits.searchResults, config.limits.searchResults);
+  const dedupe = options.dedupe ?? "file";
   const rows = database.prepare(`
     SELECT s.section_id, s.source_file_id, f.title, f.relative_path, s.heading_path,
       s.start_line, s.end_line, f.content_hash, s.section_hash, s.plain_text,
-      bm25(sections_fts, 0, 8, 4, 1) AS score
+      bm25(sections_fts, 0, 8, 4, 1)
+        + CASE
+            WHEN f.relative_path LIKE '99 - Source Notes/%' THEN 2.0
+            WHEN f.relative_path LIKE '11 - Templates/%' THEN 4.0
+            ELSE 0.0
+          END
+        + CASE
+            WHEN s.heading_path LIKE '% > Core Idea' THEN -1.5
+            WHEN s.heading_path LIKE '% > Summary' THEN -1.25
+            WHEN s.heading_path LIKE '% > Overview' THEN -1.0
+            WHEN s.heading_path LIKE '% > Basic Details' THEN -0.75
+            WHEN s.heading_path LIKE '% > Source Notes' THEN 1.0
+            ELSE 0.0
+          END AS score
     FROM sections_fts
     JOIN source_sections s ON s.section_id = sections_fts.section_id
     JOIN source_files f ON f.source_file_id = s.source_file_id
     WHERE sections_fts MATCH ? AND f.deleted = 0
     ORDER BY score, f.relative_path, s.ordinal
     LIMIT ?
-  `).all(ftsQuery(query), limit) as Array<{
+  `).all(ftsQuery(query), Math.min(limit * 10, 1_000)) as Array<{
     section_id: string; source_file_id: string; title: string; relative_path: string;
     heading_path: string; start_line: number; end_line: number; content_hash: string;
     section_hash: string; plain_text: string; score: number;
   }>;
-  return rows.map((row) => ({
+  const seen = new Set<string>();
+  const results: SearchResult[] = [];
+  const substantiveFiles = new Set(
+    rows
+      .filter((row) => row.plain_text.replaceAll(/^#{1,6}[^\n]*$/gm, "").trim().length > 0)
+      .map((row) => row.source_file_id),
+  );
+  for (const row of rows) {
+    const headingOnly = row.plain_text.replaceAll(/^#{1,6}[^\n]*$/gm, "").trim().length === 0;
+    if (headingOnly && substantiveFiles.has(row.source_file_id)) continue;
+    const key =
+      dedupe === "file" ? row.source_file_id :
+      dedupe === "title" ? row.title.trim().toLocaleLowerCase() :
+      dedupe === "content" ? row.content_hash :
+      row.section_id;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    results.push({
     sectionId: row.section_id,
     sourceFileId: row.source_file_id,
     title: row.title,
@@ -50,6 +93,8 @@ export function search(database: FeatherDatabase, config: Config, query: string,
     sectionHash: row.section_hash,
     excerpt: row.plain_text.slice(0, config.limits.excerptCharacters),
     score: row.score,
-  }));
+    });
+    if (results.length >= limit) break;
+  }
+  return results;
 }
-
