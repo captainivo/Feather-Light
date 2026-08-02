@@ -37,6 +37,12 @@ The installer also replaces the existing `mithra_current_state` and
 and semantics remain unchanged, but all access now passes through Feather-Light. The Aauthora
 service on port 8421 remains the private simulation and persistence engine during this migration.
 
+The Ubuntu `mithra-status-report` dashboard must query `POST http://127.0.0.1:8765/v1/query`
+with `{"operation":"current_state","recordConversation":false}`. It must not read
+`/api/v1/current` on port 8421 directly. Feather-Light's current-state response deliberately
+retains the wind, precipitation, outfit, possessions, emotional, and physical fields used by
+that dashboard.
+
 ## Verify
 
 ```bash

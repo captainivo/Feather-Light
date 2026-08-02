@@ -15,8 +15,8 @@ describe("Aauthora gateway", () => {
       {
         earth_date: "2026-08-01", absolute_day: 42,
         season: { name: "Light", phase: "early", ignored: true },
-        weather: { temperature_current_c: 18, sky_condition: "clear", ignored: true },
-        outfit: { indoor_summary: "linen", outdoor_summary: "cloak" },
+        weather: { temperature_current_c: 18, sky_condition: "clear", wind_gust_kmh: 12, wind_direction: "north", ignored: true },
+        outfit: { indoor_summary: "linen", outdoor_summary: "cloak", indoor_items: [{ name: "linen" }] },
         emotional_state: { as_of: "now", provenance: ["event"] },
       },
       { recorded: true },
@@ -28,7 +28,8 @@ describe("Aauthora gateway", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(result).toMatchObject({
       status: "ok",
-      weather: { temperature_current_c: 18, sky_condition: "clear" },
+      weather: { temperature_current_c: 18, sky_condition: "clear", wind_gust_kmh: 12, wind_direction: "north" },
+      outfit: { indoor_items: [{ name: "linen" }] },
       previous_conversation: { elapsed: "one day" },
       conversation_recorded: { recorded: true },
     });
