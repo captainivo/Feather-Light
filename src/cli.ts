@@ -1,4 +1,5 @@
 import { parseArgs } from "node:util";
+import { listChronologyPeriods, queryChronology, rebuildChronology } from "./chronology.js";
 import { loadConfig } from "./config.js";
 import { migrate, openDatabase } from "./database.js";
 import { findDuplicates, type DuplicateKind } from "./duplicates.js";
@@ -30,6 +31,9 @@ Usage:
   npm run cli -- entities list [--type Person|Place|...] [--limit N]
   npm run cli -- entities duplicates [--limit N]
   npm run cli -- knowledge build
+  npm run cli -- chronology build
+  npm run cli -- timeline [--anchor TEXT] [--query TEXT] [--limit N] [--all-sources]
+  npm run cli -- periods [--limit N]
   npm run cli -- serve
 
 Search deduplication modes:
@@ -74,7 +78,7 @@ async function main(): Promise<void> {
   let closeDatabase = true;
   try {
     if (command === "migrate") {
-      console.log(JSON.stringify({ status: "ok", schemaVersion: 4 }));
+      console.log(JSON.stringify({ status: "ok", schemaVersion: 5 }));
     } else if (command === "status") {
       const { values } = parseArgs({ args: rest, options: { json: { type: "boolean", default: false } } });
       const status = indexStatus(database) as {
@@ -91,6 +95,8 @@ async function main(): Promise<void> {
           unresolvedEntityLinks: number;
           assertions: number;
           typedRelationships: number;
+          chronologyEvents: number;
+          chronologyPeriods: number;
         };
         roots: Array<{ rootId: string; displayName: string; lastCompleteIngestId: string | null }>;
         lastRun: { status: string; recordsChanged: number; finishedAt: string } | null;
@@ -102,6 +108,7 @@ async function main(): Promise<void> {
         console.log(`Entities: ${status.counts.entities} · Aliases: ${status.counts.entityAliases} · Duplicate candidates: ${status.counts.entityDuplicateCandidates}`);
         console.log(`Definitions: ${status.counts.definitions} · Relationships: ${status.counts.relationships} · Unresolved links: ${status.counts.unresolvedEntityLinks}`);
         console.log(`Assertions: ${status.counts.assertions} · Typed relationships: ${status.counts.typedRelationships}`);
+        console.log(`Chronology: ${status.counts.chronologyEvents} events · ${status.counts.chronologyPeriods} periods`);
         for (const root of status.roots) console.log(`Root: ${root.displayName} (${root.rootId}) · last complete: ${root.lastCompleteIngestId ?? "never"}`);
         if (status.lastRun) console.log(`Last run: ${status.lastRun.status} · ${status.lastRun.recordsChanged} changed · ${status.lastRun.finishedAt}`);
       }
@@ -110,7 +117,11 @@ async function main(): Promise<void> {
       const roots = values.root ? [values.root] : config.archiveRoots.filter((root) => root.enabled).map((root) => root.rootId);
       for (const rootId of roots) console.log(JSON.stringify(ingestRoot(database, config, rootId, values["dry-run"]), null, 2));
       if (!values["dry-run"]) {
-        console.log(JSON.stringify({ status: "ok", knowledgeBuild: rebuildKnowledge(database) }, null, 2));
+        console.log(JSON.stringify({
+          status: "ok",
+          knowledgeBuild: rebuildKnowledge(database),
+          chronologyBuild: rebuildChronology(database),
+        }, null, 2));
       }
     } else if (command === "search") {
       const { values, positionals } = parseArgs({
@@ -271,7 +282,56 @@ async function main(): Promise<void> {
     } else if (command === "knowledge") {
       const [operation = "build"] = rest;
       if (operation !== "build") throw new Error("knowledge operation must be build");
-      console.log(JSON.stringify({ status: "ok", ...rebuildKnowledge(database) }, null, 2));
+      console.log(JSON.stringify({
+        status: "ok",
+        knowledge: rebuildKnowledge(database),
+        chronology: rebuildChronology(database),
+      }, null, 2));
+    } else if (command === "chronology") {
+      const [operation = "build"] = rest;
+      if (operation !== "build") throw new Error("chronology operation must be build");
+      console.log(JSON.stringify({ status: "ok", ...rebuildChronology(database) }, null, 2));
+    } else if (command === "timeline") {
+      const { values } = parseArgs({ args: rest, options: {
+        anchor: { type: "string" },
+        query: { type: "string", short: "q" },
+        limit: { type: "string", short: "n" },
+        "all-sources": { type: "boolean", default: false },
+        json: { type: "boolean", default: false },
+      } });
+      const events = queryChronology(database, {
+        ...(values.anchor ? { anchor: values.anchor } : {}),
+        ...(values.query ? { query: values.query } : {}),
+        limit: positiveInteger(values.limit, 50),
+        allSources: values["all-sources"],
+      }) as Array<{
+        eventId: string; label: string; eventSequence: number; sequenceIsCanonical: number;
+        dateDisplay: string; timelineAnchor: string | null; observerTime: string;
+        canonStatus: string | null; relativePath: string; sourceLine: number;
+      }>;
+      if (values.json) console.log(JSON.stringify({ status: "ok", events }, null, 2));
+      else if (events.length === 0) console.log("No chronology events matched.");
+      else for (const event of events) {
+        const sequence = event.sequenceIsCanonical ? String(event.eventSequence) : `~${event.eventSequence}`;
+        console.log(`${sequence} · ${event.label} · ${event.dateDisplay}`);
+        console.log(`  ${event.timelineAnchor ?? "No anchor"} · observer: ${event.observerTime}`);
+        console.log(`  ${event.relativePath}:${event.sourceLine} · ${event.eventId}`);
+      }
+    } else if (command === "periods") {
+      const { values } = parseArgs({ args: rest, options: {
+        limit: { type: "string", short: "n" },
+        json: { type: "boolean", default: false },
+      } });
+      const periods = listChronologyPeriods(database, positiveInteger(values.limit, 50)) as Array<{
+        periodOrder: number; label: string; civilizationalStatus: string;
+        summary: string; relativePath: string; sourceLine: number;
+      }>;
+      if (values.json) console.log(JSON.stringify({ status: "ok", periods }, null, 2));
+      else for (const period of periods) {
+        console.log(`${period.periodOrder} · ${period.label} · ${period.civilizationalStatus}`);
+        console.log(`  ${period.summary}`);
+        console.log(`  ${period.relativePath}:${period.sourceLine}`);
+      }
     } else if (command === "serve") {
       const app = buildServer(config, database);
       app.addHook("onClose", async () => database.close());

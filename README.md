@@ -38,6 +38,12 @@ npm run cli -- entities build
 npm run cli -- entities list --type Person
 npm run cli -- entities duplicates
 npm run cli -- knowledge build
+npm run cli -- chronology build
+npm run cli -- timeline
+npm run cli -- timeline --anchor "Fourth Civilization"
+npm run cli -- timeline --query "Manegira"
+npm run cli -- timeline --query "Manegira" --all-sources
+npm run cli -- periods
 npm run dev
 ```
 
@@ -68,6 +74,11 @@ Bullets under an entity's `Known Facts` heading become separate assertions with 
 line range, source hash, canon status, knowledge status, and confidence. A small allowlist of
 unambiguous structured frontmatter fields can create `located_in`, `preceded_by`, `followed_by`,
 or `associated_with` relationships. No relationship is strengthened from prose proximity.
+
+Chronology is extracted from reviewed timeline tables. Event Sequence is displayed with a `~`
+prefix because it is an editorial sort key, not a date. Old Clock years and observer-time values
+remain unknown unless explicitly supplied. Timeline queries collapse the same event referenced by
+multiple timeline sources by default; `--all-sources` exposes every occurrence and provenance.
 
 The API binds to `127.0.0.1:8765` by default:
 
