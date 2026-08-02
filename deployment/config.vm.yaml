@@ -1,0 +1,20 @@
+server:
+  host: "127.0.0.1"
+  port: 8765
+
+database:
+  path: "/home/mithra/.hermes/mithra/feather-light/state/feather-light.sqlite3"
+
+archiveRoots:
+  - rootId: "westpole-canonical"
+    displayName: "The Westpole"
+    path: "/mnt/flying-battery-documents/The Westpole"
+    readOnly: true
+    enabled: true
+
+limits:
+  maxFileBytes: 1048576
+  searchResults: 10
+  excerptCharacters: 1200
+  responseCharacters: 16000
+

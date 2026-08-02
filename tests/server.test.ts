@@ -34,5 +34,21 @@ describe("API", () => {
     const status = await app.inject({ method: "GET", url: "/v1/status" });
     expect(status.statusCode).toBe(200);
     expect(status.json()).toMatchObject({ status: "not_indexed", schemaVersion: 5 });
+
+    const toolStatus = await app.inject({
+      method: "POST",
+      url: "/v1/query",
+      payload: { operation: "status" },
+    });
+    expect(toolStatus.statusCode).toBe(200);
+    expect(toolStatus.json()).toMatchObject({ status: "not_indexed", schemaVersion: 5 });
+
+    const invalid = await app.inject({
+      method: "POST",
+      url: "/v1/query",
+      payload: { operation: "search" },
+    });
+    expect(invalid.statusCode).toBe(400);
+    expect(invalid.json()).toMatchObject({ status: "invalid_request" });
   });
 });

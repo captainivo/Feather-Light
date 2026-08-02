@@ -1,0 +1,13 @@
+[Unit]
+Description=Refresh Feather-Light every 15 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+Persistent=true
+RandomizedDelaySec=30
+Unit=feather-light-ingest.service
+
+[Install]
+WantedBy=timers.target
+

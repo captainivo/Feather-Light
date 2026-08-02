@@ -1,0 +1,7 @@
+name: feather-light
+version: "0.1.0"
+description: "Bounded read-only Westpole retrieval through Feather-Light."
+author: Feather-Light Project
+provides_tools:
+  - feather_light
+

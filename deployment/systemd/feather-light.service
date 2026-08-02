@@ -1,0 +1,22 @@
+[Unit]
+Description=Feather-Light Westpole retrieval API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/mithra/feather-light
+Environment=NODE_ENV=production
+Environment=FEATHER_LIGHT_CONFIG=/home/mithra/.config/feather-light/config.yaml
+Environment=PATH=/home/mithra/.hermes/node/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/env npm start
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/mithra/.hermes/mithra/feather-light/state
+
+[Install]
+WantedBy=default.target

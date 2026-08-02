@@ -1,0 +1,17 @@
+[Unit]
+Description=Refresh the Feather-Light Westpole index
+After=network-online.target mnt-flying\x2dbattery\x2ddocuments.mount
+RequiresMountsFor=/mnt/flying-battery-documents
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/mithra/feather-light
+Environment=NODE_ENV=production
+Environment=FEATHER_LIGHT_CONFIG=/home/mithra/.config/feather-light/config.yaml
+Environment=PATH=/home/mithra/.hermes/node/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/env node /home/mithra/feather-light/dist/src/cli.js ingest
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/mithra/.hermes/mithra/feather-light/state
