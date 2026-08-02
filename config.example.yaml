@@ -1,0 +1,22 @@
+server:
+  host: "127.0.0.1"
+  port: 8765
+
+database:
+  path: "/home/mithra/.hermes/mithra/feather-light/feather_light.sqlite3"
+
+archive_roots:
+  - root_id: "westpole-working"
+    display_name: "The Westpole Working Copy"
+    path: "/mnt/flying-battery-documents/Mithra's Notebook/Projects/The Westpole - Working Copy"
+    read_only: true
+    enabled: true
+
+limits:
+  search_results: 10
+  definition_characters: 800
+  relationships_per_result: 10
+  evidence_characters: 4000
+  graph_depth: 1
+  response_characters: 16000
+
