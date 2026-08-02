@@ -30,11 +30,13 @@ npm run cli -- ingest
 npm run cli -- search "Aanu"
 npm run cli -- search --limit 5 --dedupe title "Aanu-Kathara"
 npm run cli -- show sec_ab11f1ed3840bfafc4b84c59
+npm run cli -- get "Aanu-Kathara"
 npm run cli -- duplicates --kind title
 npm run cli -- duplicates --kind content
 npm run cli -- entities build
 npm run cli -- entities list --type Person
 npm run cli -- entities duplicates
+npm run cli -- knowledge build
 npm run dev
 ```
 
@@ -54,6 +56,12 @@ record explicitly.
 
 A non-dry-run ingest automatically rebuilds the deterministic entity projection. `entities build`
 is also available when testing classification rules without rescanning the archive.
+
+`knowledge build` extracts concise definitions using this order: explicit `definition`
+frontmatter, `Core Idea`, `Summary`, `Overview`, then a review-required first-paragraph
+fallback. Wikilinks become only `source_links_to` relationships; their presence does not imply
+stronger claims such as `caused`, `located_in`, or `created_by`. Ambiguous and unresolved links
+remain queued rather than being guessed.
 
 The API binds to `127.0.0.1:8765` by default:
 

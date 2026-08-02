@@ -4,12 +4,14 @@ import { migrate, openDatabase } from "./database.js";
 import { findDuplicates, type DuplicateKind } from "./duplicates.js";
 import {
   entityDuplicateCandidates,
+  type EntityRecord,
   type EntityType,
   listEntities,
   rebuildEntities,
 } from "./entities.js";
 import { getSection } from "./evidence.js";
 import { ingestRoot } from "./ingest.js";
+import { getEntityBrief, rebuildKnowledge } from "./knowledge.js";
 import { search, type DedupeMode, type SearchResult } from "./search.js";
 import { buildServer } from "./server.js";
 import { indexStatus } from "./status.js";
@@ -21,10 +23,12 @@ Usage:
   npm run cli -- ingest [--dry-run] [--root ROOT_ID]
   npm run cli -- search [--limit N] [--dedupe MODE] <words>
   npm run cli -- show <SECTION_ID>
+  npm run cli -- get [--relations N] <ENTITY_ID_OR_EXACT_NAME>
   npm run cli -- duplicates [--kind content|title] [--limit N]
   npm run cli -- entities build
   npm run cli -- entities list [--type Person|Place|...] [--limit N]
   npm run cli -- entities duplicates [--limit N]
+  npm run cli -- knowledge build
   npm run cli -- serve
 
 Search deduplication modes:
@@ -69,7 +73,7 @@ async function main(): Promise<void> {
   let closeDatabase = true;
   try {
     if (command === "migrate") {
-      console.log(JSON.stringify({ status: "ok", schemaVersion: 2 }));
+      console.log(JSON.stringify({ status: "ok", schemaVersion: 3 }));
     } else if (command === "status") {
       const { values } = parseArgs({ args: rest, options: { json: { type: "boolean", default: false } } });
       const status = indexStatus(database) as {
@@ -81,6 +85,9 @@ async function main(): Promise<void> {
           entities: number;
           entityAliases: number;
           entityDuplicateCandidates: number;
+          definitions: number;
+          relationships: number;
+          unresolvedEntityLinks: number;
         };
         roots: Array<{ rootId: string; displayName: string; lastCompleteIngestId: string | null }>;
         lastRun: { status: string; recordsChanged: number; finishedAt: string } | null;
@@ -90,6 +97,7 @@ async function main(): Promise<void> {
         console.log(`Index: ${status.status}`);
         console.log(`Files: ${status.counts.sourceFiles} · Sections: ${status.counts.sourceSections} · Wikilinks: ${status.counts.wikilinks}`);
         console.log(`Entities: ${status.counts.entities} · Aliases: ${status.counts.entityAliases} · Duplicate candidates: ${status.counts.entityDuplicateCandidates}`);
+        console.log(`Definitions: ${status.counts.definitions} · Relationships: ${status.counts.relationships} · Unresolved links: ${status.counts.unresolvedEntityLinks}`);
         for (const root of status.roots) console.log(`Root: ${root.displayName} (${root.rootId}) · last complete: ${root.lastCompleteIngestId ?? "never"}`);
         if (status.lastRun) console.log(`Last run: ${status.lastRun.status} · ${status.lastRun.recordsChanged} changed · ${status.lastRun.finishedAt}`);
       }
@@ -98,7 +106,7 @@ async function main(): Promise<void> {
       const roots = values.root ? [values.root] : config.archiveRoots.filter((root) => root.enabled).map((root) => root.rootId);
       for (const rootId of roots) console.log(JSON.stringify(ingestRoot(database, config, rootId, values["dry-run"]), null, 2));
       if (!values["dry-run"]) {
-        console.log(JSON.stringify({ status: "ok", entityBuild: rebuildEntities(database) }, null, 2));
+        console.log(JSON.stringify({ status: "ok", knowledgeBuild: rebuildKnowledge(database) }, null, 2));
       }
     } else if (command === "search") {
       const { values, positionals } = parseArgs({
@@ -129,6 +137,44 @@ async function main(): Promise<void> {
         console.log(`${section.relativePath}:${section.startLine}-${section.endLine}`);
         console.log(`section: ${section.sectionId}\n`);
         console.log(section.text);
+      }
+    } else if (command === "get") {
+      const { values, positionals } = parseArgs({
+        args: rest,
+        allowPositionals: true,
+        options: {
+          relations: { type: "string", short: "n" },
+          json: { type: "boolean", default: false },
+        },
+      });
+      const query = positionals.join(" ").trim();
+      const result = getEntityBrief(database, query, positiveInteger(values.relations, 10)) as {
+        status: string;
+        query?: string;
+        candidates?: EntityRecord[];
+        entity?: EntityRecord;
+        definition?: { text: string; kind: string; confidence: number; sourceHeading: string; startLine: number; endLine: number } | null;
+        relationships?: Array<{ relationType: string; targetLabel: string; targetType: string }>;
+        relationCount?: number;
+        truncated?: boolean;
+      };
+      if (values.json) console.log(JSON.stringify(result, null, 2));
+      else if (result.status === "not_found") console.log(`No entity found for '${query}'.`);
+      else if (result.status === "ambiguous") {
+        console.log(`Ambiguous entity name '${query}':`);
+        for (const candidate of result.candidates ?? []) console.log(`  ${candidate.entityId} · ${candidate.entityType} · ${candidate.canonicalLabel} — ${candidate.relativePath}`);
+      } else {
+        const entity = result.entity!;
+        console.log(`${entity.canonicalLabel} · ${entity.entityType} · ${entity.entityId}`);
+        console.log(`${entity.relativePath}${entity.aliases.length ? ` · aliases: ${entity.aliases.join(", ")}` : ""}`);
+        if (result.definition) {
+          console.log(`\n${result.definition.text}`);
+          console.log(`\nDefinition: ${result.definition.kind} · ${(result.definition.confidence * 100).toFixed(0)}% · ${result.definition.sourceHeading}:${result.definition.startLine}-${result.definition.endLine}`);
+        } else console.log("\nNo definition candidate.");
+        if (result.relationships?.length) {
+          console.log(`\nDirect relationships (${result.relationCount}${result.truncated ? ", truncated" : ""}):`);
+          for (const relationship of result.relationships) console.log(`  ${relationship.relationType} → ${relationship.targetLabel} (${relationship.targetType})`);
+        }
       }
     } else if (command === "duplicates") {
       const { values } = parseArgs({ args: rest, options: {
@@ -187,6 +233,10 @@ async function main(): Promise<void> {
       } else {
         throw new Error("entities operation must be build, list, or duplicates");
       }
+    } else if (command === "knowledge") {
+      const [operation = "build"] = rest;
+      if (operation !== "build") throw new Error("knowledge operation must be build");
+      console.log(JSON.stringify({ status: "ok", ...rebuildKnowledge(database) }, null, 2));
     } else if (command === "serve") {
       const app = buildServer(config, database);
       app.addHook("onClose", async () => database.close());

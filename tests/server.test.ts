@@ -33,6 +33,6 @@ describe("API", () => {
 
     const status = await app.inject({ method: "GET", url: "/v1/status" });
     expect(status.statusCode).toBe(200);
-    expect(status.json()).toMatchObject({ status: "not_indexed", schemaVersion: 2 });
+    expect(status.json()).toMatchObject({ status: "not_indexed", schemaVersion: 3 });
   });
 });
