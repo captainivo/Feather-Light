@@ -1,0 +1,11 @@
+[Unit]
+Description=Advance Feather-Light's environment at Vancouver midnight
+
+[Timer]
+OnCalendar=*-*-* 00:00:00 America/Vancouver
+Persistent=true
+AccuracySec=1min
+Unit=feather-light-environment.service
+
+[Install]
+WantedBy=timers.target

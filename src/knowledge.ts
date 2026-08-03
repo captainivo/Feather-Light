@@ -83,7 +83,76 @@ function bulletClaims(value: string): string[] {
     .map((line) => line.match(/^\s*[-*+]\s+(.+?)\s*$/)?.[1]?.trim())
     .filter((line): line is string => Boolean(line))
     .map(cleanMarkdown)
-    .filter((line) => line.length >= 10);
+    .filter((line) => line.length >= 10 && !/^\[[ xX]\]\s*/.test(line));
+}
+
+const structuredAssertionHeadings = new Set([
+  "construction", "composition", "materials", "form", "appearance", "physiology", "biology",
+  "function", "purpose", "capabilities", "behavior", "known behavior", "mechanism", "operation",
+  "effects", "trapped personhood", "origin", "history", "rebellion", "legacy", "current status",
+  "wailing beneath the ships",
+]);
+const MAX_ASSERTIONS_PER_SECTION = 12;
+const MAX_ASSERTIONS_PER_ENTITY = 80;
+
+function assertionHeading(headingPath: string): string | null {
+  const heading = lastHeading(headingPath);
+  return structuredAssertionHeadings.has(heading) ? heading : null;
+}
+
+function ruleSlug(value: string): string {
+  return value.replaceAll(/[^a-z0-9]+/g, "_").replaceAll(/^_+|_+$/g, "");
+}
+
+function ensureSentence(value: string): string {
+  const trimmed = value.trim();
+  return /[.!]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+}
+
+function proseClaims(value: string): string[] {
+  const withoutHeading = value.replaceAll(/^#{1,6}\s+.*$/gm, "").trim();
+  const paragraphs = withoutHeading.split(/\n\s*\n/);
+  const claims: string[] = [];
+  for (const paragraph of paragraphs) {
+    const lines = paragraph.split("\n").filter((line) => line.trim());
+    if (lines.length === 0 || lines.every((line) => /^\s*[-*+]\s+/.test(line))) continue;
+    const cleaned = cleanMarkdown(lines.filter((line) => !/^\s*[-*+]\s+/.test(line)).join("\n"));
+    if (!cleaned || cleaned.endsWith(":")) continue;
+    for (const match of cleaned.matchAll(/[^.!?]+(?:[.!?]+|$)/g)) {
+      const claim = match[0].trim();
+      if (claim.length < 20 || claim.length > 600 || claim.endsWith("?")) continue;
+      claims.push(ensureSentence(claim));
+    }
+  }
+  return claims;
+}
+
+function contextualBulletClaims(entityLabel: string, heading: string, value: string): string[] {
+  const withoutHeading = value.replaceAll(/^#{1,6}\s+.*$/gm, "").trim();
+  const leadParagraph = withoutHeading
+    .split(/\n\s*\n/)
+    .map(cleanMarkdown)
+    .find((paragraph) => paragraph.endsWith(":"));
+  const lead = leadParagraph?.match(/(?:^|[.!?]\s+)([^.!?]+:)$/)?.[1]?.trim() ?? leadParagraph;
+  return bulletClaims(value).map((claim) => {
+    const cleanedClaim = claim.replace(/[,;:]\s*$/, "").trim();
+    return ensureSentence(
+      lead ? `${lead.slice(0, -1)} ${cleanedClaim}` : `${entityLabel} — ${heading}: ${cleanedClaim}`,
+    );
+  });
+}
+
+function claimKnowledgeStatus(
+  base: ReturnType<typeof knowledgeStatus>,
+  claim: string,
+): ReturnType<typeof knowledgeStatus> {
+  if (/\b(perhaps|possibly|possible|probably|likely|unclear|unknown|unconfirmed|may have|might have|could have|may still|might still|could still|some may|some might|some could|remains undeveloped|remains unresolved|hypothes(?:is|ized)|speculat(?:e|ive|ion))\b/i.test(claim)) {
+    return { status: "speculation", confidence: Math.min(base.confidence, 0.4) };
+  }
+  if (/\b(claimed|reported|rumou?red|according to|was said|were said)\b/i.test(claim)) {
+    return { status: "reported", confidence: Math.min(base.confidence, 0.65) };
+  }
+  return base;
 }
 
 function knowledgeStatus(canonStatus: unknown): {
@@ -273,30 +342,91 @@ export function rebuildKnowledge(database: FeatherDatabase): {
         }
       }
 
-      const assertionStatus = knowledgeStatus(frontmatter.canon);
-      const knownFactSections = database.prepare(`
-        SELECT section_id AS sectionId, plain_text AS plainText
+      const canonValue = typeof frontmatter.canon === "string"
+        ? frontmatter.canon
+        : typeof frontmatter.status === "string" ? frontmatter.status : null;
+      const assertionStatus = knowledgeStatus(canonValue);
+      const assertionSections = database.prepare(`
+        SELECT section_id AS sectionId, heading_path AS headingPath,
+          ordinal, plain_text AS plainText
         FROM source_sections
-        WHERE source_file_id=? AND lower(heading_path) LIKE '% > known facts'
-      `).all(entity.sourceFileId) as Array<{ sectionId: string; plainText: string }>;
+        WHERE source_file_id=? ORDER BY ordinal
+      `).all(entity.sourceFileId) as Array<{
+        sectionId: string; headingPath: string; ordinal: number; plainText: string;
+      }>;
       const insertAssertion = database.prepare(`
         INSERT INTO assertions(
           assertion_id, subject_entity_id, predicate, object_entity_id,
           claim_text, source_section_id, canon_status, knowledge_status,
           confidence, review_status, extraction_rule
-        ) VALUES (?, ?, 'archive_claim', ?, ?, ?, ?, ?, ?, 'accepted', 'heading.known_facts.bullet')
+        ) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)
       `);
-      for (const section of knownFactSections) {
-        for (const [index, claim] of bulletClaims(section.plainText).entries()) {
-          insertAssertion.run(
-            stableId("ast", `${entity.entityId}:${section.sectionId}:${index}:${claim}`),
-            entity.entityId,
-            null,
-            claim,
-            section.sectionId,
-            typeof frontmatter.canon === "string" ? frontmatter.canon : null,
-            assertionStatus.status,
-            assertionStatus.confidence,
+      let assertionCount = 0;
+      const seenClaims = new Set<string>();
+      const addAssertion = (
+        section: { sectionId: string },
+        claim: string,
+        predicate: string,
+        status: ReturnType<typeof knowledgeStatus>,
+        confidence: number,
+        reviewStatus: "accepted" | "needs_review",
+        extractionRule: string,
+      ) => {
+        const normalizedClaim = cleanMarkdown(claim).toLocaleLowerCase();
+        if (!normalizedClaim || seenClaims.has(normalizedClaim) || assertionCount >= MAX_ASSERTIONS_PER_ENTITY) return;
+        seenClaims.add(normalizedClaim);
+        insertAssertion.run(
+          stableId("ast", `${entity.entityId}:${section.sectionId}:${extractionRule}:${normalizedClaim}`),
+          entity.entityId,
+          predicate,
+          claim,
+          section.sectionId,
+          canonValue,
+          status.status,
+          Math.min(status.confidence, confidence),
+          reviewStatus,
+          extractionRule,
+        );
+        assertionCount += 1;
+      };
+
+      for (const section of assertionSections) {
+        const heading = lastHeading(section.headingPath);
+        if (heading === "known facts") {
+          for (const claim of bulletClaims(section.plainText).slice(0, MAX_ASSERTIONS_PER_SECTION)) {
+            const status = claimKnowledgeStatus(assertionStatus, claim);
+            const predicate = status.status === "speculation"
+              ? "archive_speculation"
+              : status.status === "reported" ? "archive_report" : "archive_claim";
+            addAssertion(
+              section, claim, predicate, status, status.confidence,
+              "accepted", "heading.known_facts.bullet",
+            );
+          }
+          continue;
+        }
+        const approvedHeading = assertionHeading(section.headingPath);
+        if (!approvedHeading) continue;
+        const slug = ruleSlug(approvedHeading);
+        const bullets = contextualBulletClaims(entity.canonicalLabel, approvedHeading, section.plainText);
+        const prose = proseClaims(section.plainText);
+        const candidates = [
+          ...bullets.map((claim) => ({ claim, kind: "bullet" })),
+          ...prose.map((claim) => ({ claim, kind: "sentence" })),
+        ].slice(0, MAX_ASSERTIONS_PER_SECTION);
+        for (const candidate of candidates) {
+          const status = claimKnowledgeStatus(assertionStatus, candidate.claim);
+          const predicate = status.status === "speculation"
+            ? "archive_speculation"
+            : status.status === "reported" ? "archive_report" : "archive_claim";
+          addAssertion(
+            section,
+            candidate.claim,
+            predicate,
+            status,
+            candidate.kind === "bullet" ? 0.9 : 0.85,
+            "accepted",
+            `heading.${slug}.${candidate.kind}`,
           );
         }
       }
@@ -382,21 +512,99 @@ export function getEntityAssertions(database: FeatherDatabase, query: string, li
   const entityId = matches[0]!;
   const entity = database.prepare(`
     SELECT entity_id AS entityId, canonical_label AS canonicalLabel,
-      entity_type AS entityType FROM entities WHERE entity_id=?
-  `).get(entityId);
-  const assertions = database.prepare(`
-    SELECT a.assertion_id AS assertionId, a.predicate, a.claim_text AS claimText,
-      a.canon_status AS canonStatus, a.knowledge_status AS knowledgeStatus,
-      a.confidence, a.review_status AS reviewStatus,
-      s.section_id AS sourceSectionId, s.heading_path AS sourceHeading,
-      s.start_line AS startLine, s.end_line AS endLine,
-      f.relative_path AS relativePath, f.content_hash AS sourceHash
-    FROM assertions a
-    JOIN source_sections s ON s.section_id=a.source_section_id
-    JOIN source_files f ON f.source_file_id=s.source_file_id
-    WHERE a.subject_entity_id=?
-    ORDER BY s.ordinal, a.assertion_id LIMIT ?
-  `).all(entityId, limit);
-  const total = (database.prepare("SELECT count(*) AS count FROM assertions WHERE subject_entity_id=?").get(entityId) as { count: number }).count;
-  return { status: "ok", entity, assertions, total, truncated: total > limit };
+      entity_type AS entityType, canon_status AS canonStatus, source_file_id AS sourceFileId
+    FROM entities WHERE entity_id=?
+  `).get(entityId) as {
+    entityId: string; canonicalLabel: string; entityType: string;
+    canonStatus: string | null; sourceFileId: string;
+  };
+  let assertions = database.prepare(`
+    WITH ranked AS (
+      SELECT a.assertion_id AS assertionId, a.predicate, a.claim_text AS claimText,
+        a.canon_status AS canonStatus, a.knowledge_status AS knowledgeStatus,
+        a.confidence, a.review_status AS reviewStatus, a.extraction_rule AS extractionRule,
+        s.section_id AS sourceSectionId, s.heading_path AS sourceHeading,
+        s.start_line AS startLine, s.end_line AS endLine, s.ordinal AS sectionOrdinal,
+        f.relative_path AS relativePath, f.content_hash AS sourceHash,
+        row_number() OVER (PARTITION BY a.source_section_id ORDER BY a.assertion_id) AS sectionRank
+      FROM assertions a
+      JOIN source_sections s ON s.section_id=a.source_section_id
+      JOIN source_files f ON f.source_file_id=s.source_file_id
+      WHERE a.subject_entity_id=?
+    )
+    SELECT assertionId, predicate, claimText, canonStatus, knowledgeStatus,
+      confidence, reviewStatus, extractionRule, sourceSectionId, sourceHeading,
+      startLine, endLine, relativePath, sourceHash
+    FROM ranked
+    ORDER BY sectionRank, sectionOrdinal, assertionId LIMIT ?
+  `).all(entityId, limit) as Array<Record<string, unknown>>;
+  let total = (database.prepare("SELECT count(*) AS count FROM assertions WHERE subject_entity_id=?").get(entityId) as { count: number }).count;
+  const structuredAssertionCount = total;
+  const sourceHeadings = database.prepare(`
+    SELECT heading_path AS headingPath FROM source_sections
+    WHERE source_file_id=? ORDER BY ordinal
+  `).all(entity.sourceFileId) as Array<{ headingPath: string }>;
+  const eligibleSectionCount = sourceHeadings.filter((section) => {
+    const heading = lastHeading(section.headingPath);
+    return heading === "known facts" || assertionHeading(section.headingPath) !== null;
+  }).length;
+  let fallback: "preferred_definition" | null = null;
+  if (total === 0 && limit > 0) {
+    const definition = database.prepare(`
+      SELECT d.definition_id AS definitionId, d.definition_text AS text,
+        d.confidence, d.review_status AS reviewStatus, d.extraction_rule AS extractionRule,
+        s.section_id AS sourceSectionId, s.heading_path AS sourceHeading,
+        s.start_line AS startLine, s.end_line AS endLine,
+        f.relative_path AS relativePath, f.content_hash AS sourceHash
+      FROM definitions d
+      JOIN source_sections s ON s.section_id=d.source_section_id
+      JOIN source_files f ON f.source_file_id=s.source_file_id
+      WHERE d.entity_id=?
+      ORDER BY d.is_preferred DESC, d.confidence DESC LIMIT 1
+    `).get(entityId) as {
+      definitionId: string; text: string; confidence: number; reviewStatus: string;
+      extractionRule: string; sourceSectionId: string; sourceHeading: string;
+      startLine: number; endLine: number; relativePath: string; sourceHash: string;
+    } | undefined;
+    if (definition) {
+      const status = knowledgeStatus(entity.canonStatus);
+      assertions = [{
+        assertionId: definition.definitionId,
+        predicate: "archive_definition",
+        claimText: definition.text,
+        canonStatus: entity.canonStatus,
+        knowledgeStatus: status.status,
+        confidence: Math.min(definition.confidence, status.confidence),
+        reviewStatus: definition.reviewStatus,
+        extractionRule: `definition_fallback.${definition.extractionRule}`,
+        sourceSectionId: definition.sourceSectionId,
+        sourceHeading: definition.sourceHeading,
+        startLine: definition.startLine,
+        endLine: definition.endLine,
+        relativePath: definition.relativePath,
+        sourceHash: definition.sourceHash,
+      }];
+      total = 1;
+      fallback = "preferred_definition";
+    }
+  }
+  return {
+    status: "ok",
+    entity: {
+      entityId: entity.entityId,
+      canonicalLabel: entity.canonicalLabel,
+      entityType: entity.entityType,
+      canonStatus: entity.canonStatus,
+    },
+    assertions,
+    total,
+    truncated: total > limit,
+    coverage: {
+      level: structuredAssertionCount > 0 ? "structured" : fallback ? "definition_only" : "empty",
+      structuredAssertionCount,
+      eligibleSectionCount,
+      sourceSectionCount: sourceHeadings.length,
+    },
+    ...(fallback ? { fallback } : {}),
+  };
 }

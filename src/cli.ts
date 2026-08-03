@@ -1,4 +1,5 @@
 import { parseArgs } from "node:util";
+import { ensureEnvironmentCurrent } from "./aauthora.js";
 import { listChronologyPeriods, queryChronology, rebuildChronology } from "./chronology.js";
 import { loadConfig } from "./config.js";
 import { migrate, openDatabase } from "./database.js";
@@ -16,6 +17,7 @@ import { getEntityAssertions, getEntityBrief, rebuildKnowledge } from "./knowled
 import { search, type DedupeMode, type SearchResult } from "./search.js";
 import { buildServer } from "./server.js";
 import { indexStatus } from "./status.js";
+import { latestEnvironment } from "./environment.js";
 
 const HELP = `Feather-Light — read-only Westpole search
 
@@ -34,6 +36,8 @@ Usage:
   npm run cli -- chronology build
   npm run cli -- timeline [--anchor TEXT] [--query TEXT] [--limit N] [--all-sources]
   npm run cli -- periods [--limit N]
+  npm run cli -- environment status
+  npm run cli -- environment catch-up
   npm run cli -- serve
 
 Search deduplication modes:
@@ -78,7 +82,7 @@ async function main(): Promise<void> {
   let closeDatabase = true;
   try {
     if (command === "migrate") {
-      console.log(JSON.stringify({ status: "ok", schemaVersion: 5 }));
+      console.log(JSON.stringify({ status: "ok", schemaVersion: 7 }));
     } else if (command === "status") {
       const { values } = parseArgs({ args: rest, options: { json: { type: "boolean", default: false } } });
       const status = indexStatus(database) as {
@@ -331,6 +335,16 @@ async function main(): Promise<void> {
         console.log(`${period.periodOrder} · ${period.label} · ${period.civilizationalStatus}`);
         console.log(`  ${period.summary}`);
         console.log(`  ${period.relativePath}:${period.sourceLine}`);
+      }
+    } else if (command === "environment") {
+      const [operation = "status"] = rest;
+      if (operation === "status") {
+        console.log(JSON.stringify({ status: "ok", current: latestEnvironment(database) }, null, 2));
+      } else if (operation === "catch-up") {
+        const result = await ensureEnvironmentCurrent(config, database);
+        console.log(JSON.stringify({ status: "ok", generated: result.generated.length, current: result.current }, null, 2));
+      } else {
+        throw new Error("environment operation must be status or catch-up");
       }
     } else if (command === "serve") {
       const app = buildServer(config, database);

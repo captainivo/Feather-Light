@@ -1,23 +1,16 @@
 [Unit]
-Description=Feather-Light Westpole retrieval API
+Description=Advance Feather-Light's TypeScript Aauthora environment
 After=network-online.target
-Wants=network-online.target
 
 [Service]
-Type=simple
+Type=oneshot
 WorkingDirectory=/home/mithra/feather-light
 Environment=NODE_ENV=production
 Environment=FEATHER_LIGHT_CONFIG=/home/mithra/.config/feather-light/config.yaml
 Environment=PATH=/home/mithra/.hermes/node/bin:/usr/local/bin:/usr/bin:/bin
-ExecStartPre=/usr/bin/env node /home/mithra/feather-light/dist/src/cli.js environment catch-up
-ExecStart=/usr/bin/env npm start
-Restart=on-failure
-RestartSec=5
+ExecStart=/usr/bin/env node /home/mithra/feather-light/dist/src/cli.js environment catch-up
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths=/home/mithra/.hermes/mithra/feather-light/state
-
-[Install]
-WantedBy=default.target

@@ -1,4 +1,4 @@
-import type { FeatherDatabase } from "./database.js";
+import { SCHEMA_VERSION, type FeatherDatabase } from "./database.js";
 
 export function indexStatus(database: FeatherDatabase): object {
   const counts = database.prepare(`
@@ -30,5 +30,10 @@ export function indexStatus(database: FeatherDatabase): object {
       records_changed AS recordsChanged, error_summary AS errorSummary
     FROM ingest_runs ORDER BY started_at DESC LIMIT 1
   `).get() ?? null;
-  return { status: roots.length > 0 ? "ok" : "not_indexed", schemaVersion: 5, counts, roots, lastRun };
+  const environment = database.prepare(`
+    SELECT absolute_day AS absoluteDay, earth_date AS earthDate, generated_at AS generatedAt,
+      generator_version AS generatorVersion, source
+    FROM environment_days ORDER BY absolute_day DESC LIMIT 1
+  `).get() ?? null;
+  return { status: roots.length > 0 ? "ok" : "not_indexed", schemaVersion: SCHEMA_VERSION, counts, roots, lastRun, environment };
 }

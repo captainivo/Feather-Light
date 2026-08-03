@@ -6,14 +6,26 @@ from urllib.request import Request, urlopen
 
 BASE_URL = "http://127.0.0.1:8765"
 MAX_RESPONSE_BYTES = 65_536
+VALID_SCOPES = {"weather", "summary", "full"}
 
 SCHEMA = {
     "name": "mithra_current_state",
     "description": (
-        "Get Mithra's current Aauthora environment, bodily cycle, emotional state, outfit, "
-        "possessions summary, and prior-conversation interval through Feather-Light."
+        "Get Mithra's current Aauthora state through Feather-Light. Use weather for a minimal "
+        "weather/season snapshot, summary for compact environment/body/mood/outfit context, "
+        "and full only when detailed audit evidence is required."
     ),
-    "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "scope": {
+                "type": "string",
+                "enum": ["weather", "summary", "full"],
+                "description": "weather is minimal; summary is the default; full returns audit detail.",
+            },
+        },
+        "additionalProperties": False,
+    },
 }
 
 
@@ -42,12 +54,22 @@ def check_available() -> bool:
         return False
 
 
-def fetch_compact_state(*, record_conversation: bool) -> dict:
-    return _query({"operation": "current_state", "recordConversation": record_conversation})
+def fetch_compact_state(*, record_conversation: bool, scope: str = "summary") -> dict:
+    selected_scope = scope if scope in VALID_SCOPES else "summary"
+    return _query({
+        "operation": "current_state",
+        "recordConversation": record_conversation,
+        "scope": selected_scope,
+    })
 
 
-def handle(_args: dict, **_kwargs) -> str:
+def handle(args: dict, **_kwargs) -> str:
     try:
-        return json.dumps(fetch_compact_state(record_conversation=True), sort_keys=True)
+        scope = str((args or {}).get("scope") or "summary")
+        return json.dumps(
+            fetch_compact_state(record_conversation=True, scope=scope),
+            sort_keys=True,
+            separators=(",", ":"),
+        )
     except Exception as exc:
         return json.dumps({"error": "feather_light_state_unavailable", "detail": str(exc)[:240]})

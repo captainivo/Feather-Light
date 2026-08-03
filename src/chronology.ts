@@ -175,9 +175,24 @@ export function queryChronology(
     JOIN source_files f ON f.source_file_id=e.timeline_source_file_id
     JOIN source_sections s ON s.section_id=e.source_section_id
     WHERE (? IS NULL OR lower(e.timeline_anchor) LIKE ?)
-      AND (? IS NULL OR lower(e.label) LIKE ?)
+      AND (
+        ? IS NULL
+        OR lower(e.label) LIKE ?
+        OR lower(e.event_key) LIKE ?
+        OR lower(e.timeline_anchor) LIKE ?
+        OR lower(f.relative_path) LIKE ?
+      )
     ORDER BY e.event_sequence, e.label, e.event_id LIMIT ?
-  `).all(anchorFilter, anchorFilter, queryFilter, queryFilter, Math.min(limit * 5, 1_000)) as Array<{ eventKey: string } & object>;
+  `).all(
+    anchorFilter,
+    anchorFilter,
+    queryFilter,
+    queryFilter,
+    queryFilter,
+    queryFilter,
+    queryFilter,
+    Math.min(limit * 5, 1_000),
+  ) as Array<{ eventKey: string } & object>;
   if (options.allSources) return rows.slice(0, limit);
   const seen = new Set<string>();
   return rows.filter((row) => {

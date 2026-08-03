@@ -25,6 +25,19 @@ const configSchema = z.object({
       timeoutMs: z.number().int().min(100).max(10_000).default(2_000),
     })
     .default({ baseUrl: "http://127.0.0.1:8421", timeoutMs: 2_000 }),
+  environment: z
+    .object({
+      timezone: z.string().min(1).default("America/Vancouver"),
+      masterSeed: z.string().min(16).default("aauthora-canonical-seed-v1"),
+      simulationStartDate: z.string().date().default("2026-07-16"),
+      startingAbsoluteDay: z.number().int().min(1).default(1),
+    })
+    .default({
+      timezone: "America/Vancouver",
+      masterSeed: "aauthora-canonical-seed-v1",
+      simulationStartDate: "2026-07-16",
+      startingAbsoluteDay: 1,
+    }),
   archiveRoots: z.array(
     z.object({
       rootId: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),

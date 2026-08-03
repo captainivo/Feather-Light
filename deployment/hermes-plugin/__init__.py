@@ -26,7 +26,7 @@ SCHEMA = {
         "properties": {
             "operation": {
                 "type": "string",
-                "enum": ["search", "get", "facts", "timeline", "status", "current_state", "emotional_reflection"],
+                "enum": ["search", "get", "facts", "timeline", "status", "current_state", "emotional_reflection", "agency"],
             },
             "query": {
                 "type": "string",
@@ -37,6 +37,11 @@ SCHEMA = {
                 "description": "Optional chronology anchor such as Fourth Civilization.",
             },
             "limit": {"type": "integer", "minimum": 1, "maximum": 20},
+            "view": {
+                "type": "string",
+                "enum": ["brief", "standard"],
+                "description": "brief is the token-efficient default; standard includes full audit metadata.",
+            },
             "dedupe": {
                 "type": "string",
                 "enum": ["file", "title", "content", "none"],
@@ -50,12 +55,21 @@ SCHEMA = {
                 "type": "boolean",
                 "description": "For current_state, record this conversation activity; defaults true.",
             },
+            "scope": {
+                "type": "string",
+                "enum": ["weather", "summary", "full"],
+                "description": "For current_state: weather is minimal, summary is the compact default, full is audit detail.",
+            },
             "reflection": {
                 "type": "object",
                 "description": (
                     "For emotional_reflection: a deliberate record_event, calibrate_cue, or "
                     "retract_event payload. Never infer feelings from weather or bodily state."
                 ),
+            },
+            "agency": {
+                "type": "object",
+                "description": "For agency: an explicit state, set, repair, revise, or retract payload. Never infer a directive.",
             },
         },
         "required": ["operation"],
@@ -95,11 +109,14 @@ def handle(args: dict[str, Any] | str, **_kwargs: Any) -> str:
         payload: dict[str, Any] = {"operation": "search", "query": args}
     else:
         payload = dict(args or {})
-    payload.setdefault("limit", 5)
+    payload.setdefault("limit", 3)
+    if payload.get("operation") in {"search", "get", "facts", "timeline"}:
+        payload.setdefault("view", "brief")
     if payload.get("operation") == "search":
         payload.setdefault("dedupe", "file")
     if payload.get("operation") == "current_state":
         payload.setdefault("recordConversation", True)
+        payload.setdefault("scope", "summary")
     return json.dumps(_request(payload), ensure_ascii=False, separators=(",", ":"))
 
 

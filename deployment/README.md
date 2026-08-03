@@ -10,8 +10,17 @@ Target layout:
 ```
 
 The API and Hermes are expected to run on the same VM. Feather-Light binds only to
-`127.0.0.1:8765`; it is not exposed to the LAN. The Hermes plugin exposes only retrieval and has
-no ingestion, database, filesystem, SQL, Cypher, or mutation operation.
+`127.0.0.1:8765`; it is not exposed to the LAN. Hermes receives bounded operations and has no
+filesystem, SQL, Cypher, or archive-ingestion access. Deliberate emotional and agency operations
+are the only mutation surfaces.
+
+Feather-Light 0.4 owns the deterministic Aauthora environmental clock in TypeScript. On first
+startup it imports the current day from the legacy Python Aauthora API, then persists and advances
+season, Thaena, weather, accumulation, daylight, and bodily-cycle state in its own SQLite database.
+The `feather-light-environment.timer` performs catch-up at Vancouver midnight; every read also
+checks for missed days. Weather-only reads no longer depend on Python. The Python API temporarily
+remains available for emotional reflection, conversation activity, inventory, gifts, and outfit
+records while those stores are migrated separately.
 
 ## Install
 
@@ -34,25 +43,36 @@ acceptance test.
 
 The installer also replaces the existing `mithra_current_state` and
 `mithra_emotional_reflection` implementations with compatibility shims. Their public tool names
-and semantics remain unchanged, but all access now passes through Feather-Light. The Aauthora
-service on port 8421 remains the private simulation and persistence engine during this migration.
+remain unchanged, and all access now passes through Feather-Light. Current-state retrieval accepts
+`weather`, `summary`, and `full` scopes; `summary` is the compact default and `full` is the explicit
+audit path. The Aauthora service on port 8421 is now a temporary persistence backend only for the
+remaining non-weather systems.
 
-The Ubuntu `mithra-status-report` dashboard must query `POST http://127.0.0.1:8765/v1/query`
-with `{"operation":"current_state","recordConversation":false}`. It must not read
-`/api/v1/current` on port 8421 directly. Feather-Light's current-state response deliberately
-retains the wind, precipitation, outfit, possessions, emotional, and physical fields used by
-that dashboard.
+Version `0.2.4` expands conservative fact extraction beyond `Known Facts` lists. Approved factual
+headings such as Construction, Form, Function, Appearance, History, Trapped Personhood, reports,
+and Legacy can supply bounded sentence and bullet assertions. Bullet fragments are contextualized
+with their section lead or entity and heading; open-question sections remain excluded. Explicit
+reports and editorial speculation retain separate predicates and confidence. Facts responses include
+a coverage summary and distribute bounded results across source sections before returning additional
+claims from the same section.
+
+Version `0.2.5` normalizes punctuation on contextualized bullet fragments and uses only the final
+colon-led clause as their frame. This prevents comma-period endings and avoids repeating unrelated
+lead sentences.
 
 ## Verify
 
 ```bash
-systemctl --user status feather-light.service feather-light-ingest.timer
+systemctl --user status feather-light.service feather-light-ingest.timer feather-light-environment.timer
 journalctl --user -u feather-light.service -n 100 --no-pager
 curl -s http://127.0.0.1:8765/health
 curl -s http://127.0.0.1:8765/v1/status
 curl -s -X POST http://127.0.0.1:8765/v1/query \
   -H 'Content-Type: application/json' \
-  -d '{"operation":"get","query":"Aanu-Kathara","limit":5}'
+  -d '{"operation":"get","query":"Aanu-Kathara","limit":3,"view":"brief"}'
+curl -s -X POST http://127.0.0.1:8765/v1/query \
+  -H 'Content-Type: application/json' \
+  -d '{"operation":"current_state","scope":"weather","recordConversation":false}'
 ```
 
 Before activation, verify the configured archive path exists and is the intended canonical,

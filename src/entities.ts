@@ -46,8 +46,6 @@ const explicitTypes = new Map<string, EntityType>([
   ["artifact", "Artifact"],
   ["system", "Technology"],
   ["species-system", "Technology"],
-  ["planetary-system", "Technology"],
-  ["planetary system", "Technology"],
   ["event", "Event"],
   ["concept", "Concept"],
   ["theme", "Concept"],
@@ -66,6 +64,7 @@ const folderTypes: Array<[string, EntityType]> = [
 
 const excludedFolders = ["99 - Source Notes/", "11 - Templates/", "13 - TODO/", "10 - Drafting/"];
 const excludedSourceTypes = new Set(["index", "artifact-index", "todo", "overview", "drafting", "source-processing"]);
+const contextDependentTypes = new Set(["planetary-system", "planetary system"]);
 
 export function normalizeEntityLabel(value: string): string {
   return value
@@ -96,6 +95,15 @@ function classification(relativePath: string, frontmatter: Record<string, unknow
   if (sourceType && excludedSourceTypes.has(sourceType)) return null;
   const explicit = sourceType ? explicitTypes.get(sourceType) : undefined;
   const folder = folderTypes.find(([prefix]) => relativePath.startsWith(prefix));
+  if (sourceType && contextDependentTypes.has(sourceType)) {
+    if (!folder) return null;
+    return {
+      entityType: folder[1],
+      confidence: 0.85,
+      reviewStatus: "needs_review",
+      reason: `frontmatter type '${sourceType}' is context-dependent; folder '${folder[0]}' suggests ${folder[1]}`,
+    };
+  }
   if (explicit) {
     return {
       entityType: explicit,

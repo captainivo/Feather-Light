@@ -9,6 +9,12 @@ aauthora:
   baseUrl: "http://127.0.0.1:8421"
   timeoutMs: 2000
 
+environment:
+  timezone: "America/Vancouver"
+  masterSeed: "aauthora-canonical-seed-v1"
+  simulationStartDate: "2026-07-16"
+  startingAbsoluteDay: 1
+
 archiveRoots:
   - rootId: "westpole-canonical"
     displayName: "The Westpole"

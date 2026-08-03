@@ -1,0 +1,6 @@
+name: mithra-open-hand
+version: "0.1.0"
+description: "Advisory presence for explicit Mithra-authored agency directives routed through Feather-Light."
+author: Feather-Light Project
+provides_tools:
+  - mithra_agency

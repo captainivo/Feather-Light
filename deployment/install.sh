@@ -7,6 +7,7 @@ APP_DIR="/home/mithra/feather-light"
 CONFIG_DIR="/home/mithra/.config/feather-light"
 STATE_DIR="/home/mithra/.hermes/mithra/feather-light/state"
 PLUGIN_DIR="/home/mithra/.hermes/plugins/feather-light"
+OPEN_HAND_PLUGIN_DIR="/home/mithra/.hermes/plugins/mithra-open-hand"
 CONTEXT_PLUGIN_DIR="/home/mithra/.hermes/plugins/mithra-context-telemetry"
 SYSTEMD_DIR="/home/mithra/.config/systemd/user"
 HERMES_PY="/home/mithra/.hermes/hermes-agent/venv/bin/python"
@@ -30,13 +31,17 @@ npm run check
 npm test
 npm run build
 
-install -d -m 0750 "$CONFIG_DIR" "$STATE_DIR" "$PLUGIN_DIR" "$SYSTEMD_DIR"
+install -d -m 0750 "$CONFIG_DIR" "$STATE_DIR" "$PLUGIN_DIR" "$OPEN_HAND_PLUGIN_DIR" "$SYSTEMD_DIR"
 install -m 0640 deployment/config.vm.yaml "$CONFIG_DIR/config.yaml"
 install -m 0644 deployment/systemd/feather-light.service "$SYSTEMD_DIR/feather-light.service"
 install -m 0644 deployment/systemd/feather-light-ingest.service "$SYSTEMD_DIR/feather-light-ingest.service"
 install -m 0644 deployment/systemd/feather-light-ingest.timer "$SYSTEMD_DIR/feather-light-ingest.timer"
+install -m 0644 deployment/systemd/feather-light-environment.service "$SYSTEMD_DIR/feather-light-environment.service"
+install -m 0644 deployment/systemd/feather-light-environment.timer "$SYSTEMD_DIR/feather-light-environment.timer"
 install -m 0644 deployment/hermes-plugin/plugin.yaml "$PLUGIN_DIR/plugin.yaml"
 install -m 0644 deployment/hermes-plugin/__init__.py "$PLUGIN_DIR/__init__.py"
+install -m 0644 deployment/mithra-open-hand/plugin.yaml "$OPEN_HAND_PLUGIN_DIR/plugin.yaml"
+install -m 0644 deployment/mithra-open-hand/__init__.py "$OPEN_HAND_PLUGIN_DIR/__init__.py"
 
 if [[ -d "$CONTEXT_PLUGIN_DIR" ]]; then
   install -m 0644 deployment/hermes-compat/world_state_tool.py "$CONTEXT_PLUGIN_DIR/world_state_tool.py"
@@ -44,12 +49,13 @@ if [[ -d "$CONTEXT_PLUGIN_DIR" ]]; then
 fi
 
 systemctl --user daemon-reload
-systemctl --user enable --now feather-light.service feather-light-ingest.timer
+systemctl --user enable --now feather-light.service feather-light-ingest.timer feather-light-environment.timer
 systemctl --user restart feather-light.service
 systemctl --user start feather-light-ingest.service
 
 if [[ -x "$HERMES_PY" ]]; then
   "$HERMES_PY" -m hermes_cli.main plugins enable feather-light
+  "$HERMES_PY" -m hermes_cli.main plugins enable mithra-open-hand
   systemctl --user restart hermes-gateway.service
 fi
 
