@@ -1,4 +1,5 @@
 import type { FeatherDatabase } from "./database.js";
+import { retrievalVisibleSql } from "./open-hand/suppression.js";
 import { stableId } from "./hash.js";
 
 export type EntityType =
@@ -238,6 +239,7 @@ export function listEntities(database: FeatherDatabase, entityType?: EntityType,
       e.classification_reason AS classificationReason
     FROM entities e JOIN source_files f ON f.source_file_id=e.source_file_id
     WHERE e.retired = 0 AND (? IS NULL OR e.entity_type = ?)
+      AND ${retrievalVisibleSql("f")}
     ORDER BY e.entity_type, e.canonical_label LIMIT ?
   `).all(entityType ?? null, entityType ?? null, limit) as Omit<EntityRecord, "aliases">[];
   const aliasQuery = database.prepare("SELECT alias_text FROM entity_aliases WHERE entity_id=? ORDER BY normalized_alias");

@@ -22,6 +22,18 @@ checks for missed days. Weather-only reads no longer depend on Python. The Pytho
 remains available for emotional reflection, conversation activity, inventory, gifts, and outfit
 records while those stores are migrated separately.
 
+Feather-Light 0.5 adds Open Hand Phase 3. Explicit refusal, pause, and withdrawal directives are
+checked deterministically before Hermes tool calls. Agency control remains exempt so a directive
+can always be revised or retracted. A separate storage-repair ledger distinguishes correction,
+supersession, retraction, retrieval suppression, and deletion intent. The only native repair apply
+operation is reversible suppression in Feather-Light's retrieval index: it changes query visibility
+without changing or deleting canonical source files. Other storage systems report their actual
+capability mode and require a separate verified adapter or manual action.
+
+Open Hand is a local continuity and enforcement boundary, not proof of caller identity. Deployment
+must keep Feather-Light loopback-only, and future multi-agent support must add authenticated,
+principal-scoped ownership before directives can safely be shared between agents.
+
 The civil clock maps each Vancouver calendar day proportionally onto that day's 24–45-hour
 Aauthoran duration. Aauthoran midnight aligns with Vancouver midnight, and the recorded daylight
 interval is centered on the Aauthoran day's midpoint. `current_state` exposes elapsed and remaining

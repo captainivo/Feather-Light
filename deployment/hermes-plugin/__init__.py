@@ -26,7 +26,7 @@ SCHEMA = {
         "properties": {
             "operation": {
                 "type": "string",
-                "enum": ["search", "get", "facts", "timeline", "status", "current_state", "emotional_reflection", "agency"],
+                "enum": ["search", "get", "facts", "timeline", "status", "current_state", "emotional_reflection"],
             },
             "query": {
                 "type": "string",
@@ -66,10 +66,6 @@ SCHEMA = {
                     "For emotional_reflection: a deliberate record_event, calibrate_cue, or "
                     "retract_event payload. Never infer feelings from weather or bodily state."
                 ),
-            },
-            "agency": {
-                "type": "object",
-                "description": "For agency: an explicit state, set, repair, revise, or retract payload. Never infer a directive.",
             },
         },
         "required": ["operation"],

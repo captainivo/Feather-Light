@@ -1,5 +1,6 @@
 import type { Config } from "./config.js";
 import type { FeatherDatabase } from "./database.js";
+import { retrievalVisibleSql } from "./open-hand/suppression.js";
 
 export interface SearchResult {
   sectionId: string;
@@ -57,6 +58,7 @@ export function search(
     JOIN source_sections s ON s.section_id = sections_fts.section_id
     JOIN source_files f ON f.source_file_id = s.source_file_id
     WHERE sections_fts MATCH ? AND f.deleted = 0
+      AND ${retrievalVisibleSql("f", "s.section_id")}
     ORDER BY score, f.relative_path, s.ordinal
     LIMIT ?
   `).all(ftsQuery(query), Math.min(limit * 10, 1_000)) as Array<{

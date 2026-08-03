@@ -2,6 +2,8 @@ import Fastify from "fastify";
 import { z } from "zod";
 import { currentState, emotionalReflectionSchema, reflectEmotion } from "./aauthora.js";
 import { agencyActionSchema, agencyState, operateAgency } from "./agency.js";
+import { agencyEnforcementSchema, evaluateAgencyEnforcement } from "./open-hand/enforcement.js";
+import { operateRepair, repairActionSchema } from "./open-hand/repair.js";
 import { queryChronology } from "./chronology.js";
 import { compactAssertionResponse, compactEntityResponse, compactSearchResults, compactTimelineEvents } from "./compact.js";
 import type { Config } from "./config.js";
@@ -14,7 +16,7 @@ const responseView = z.enum(["brief", "standard"]).default("brief");
 
 export function buildServer(config: Config, database: FeatherDatabase) {
   const app = Fastify({ logger: true, bodyLimit: config.limits.responseCharacters });
-  app.get("/health", async () => ({ status: "ok", service: "feather-light", version: "0.4.0" }));
+  app.get("/health", async () => ({ status: "ok", service: "feather-light", version: "0.5.0" }));
   app.get("/v1/status", async () => indexStatus(database));
   app.post("/v1/search", async (request, reply) => {
     const parsed = z.object({
@@ -75,6 +77,8 @@ export function buildServer(config: Config, database: FeatherDatabase) {
     }),
     z.object({ operation: z.literal("emotional_reflection"), reflection: emotionalReflectionSchema }),
     z.object({ operation: z.literal("agency"), agency: agencyActionSchema }),
+    z.object({ operation: z.literal("agency_enforce"), enforcement: agencyEnforcementSchema }),
+    z.object({ operation: z.literal("open_hand_repair"), repair: repairActionSchema }),
   ]);
   app.post("/v1/query", async (request, reply) => {
     const parsed = querySchema.safeParse(request.body);
@@ -100,6 +104,16 @@ export function buildServer(config: Config, database: FeatherDatabase) {
     if (input.operation === "agency") {
       try {
         return { status: "ok", result: operateAgency(database, input.agency) };
+      } catch (error) {
+        return reply.code(400).send({ status: "invalid_request", error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    if (input.operation === "agency_enforce") {
+      return { status: "ok", result: evaluateAgencyEnforcement(database, input.enforcement) };
+    }
+    if (input.operation === "open_hand_repair") {
+      try {
+        return { status: "ok", result: operateRepair(database, input.repair) };
       } catch (error) {
         return reply.code(400).send({ status: "invalid_request", error: error instanceof Error ? error.message : String(error) });
       }

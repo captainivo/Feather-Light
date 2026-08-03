@@ -32,11 +32,11 @@ describe("API", () => {
 
     const health = await app.inject({ method: "GET", url: "/health" });
     expect(health.statusCode).toBe(200);
-    expect(health.json()).toEqual({ status: "ok", service: "feather-light", version: "0.4.0" });
+    expect(health.json()).toEqual({ status: "ok", service: "feather-light", version: "0.5.0" });
 
     const status = await app.inject({ method: "GET", url: "/v1/status" });
     expect(status.statusCode).toBe(200);
-    expect(status.json()).toMatchObject({ status: "not_indexed", schemaVersion: 7 });
+    expect(status.json()).toMatchObject({ status: "not_indexed", schemaVersion: 8 });
 
     const toolStatus = await app.inject({
       method: "POST",
@@ -44,7 +44,7 @@ describe("API", () => {
       payload: { operation: "status" },
     });
     expect(toolStatus.statusCode).toBe(200);
-    expect(toolStatus.json()).toMatchObject({ status: "not_indexed", schemaVersion: 7 });
+    expect(toolStatus.json()).toMatchObject({ status: "not_indexed", schemaVersion: 8 });
 
     const invalid = await app.inject({
       method: "POST",

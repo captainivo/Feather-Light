@@ -2,6 +2,7 @@ import { basename } from "node:path";
 import type { FeatherDatabase } from "./database.js";
 import { normalizeEntityLabel } from "./entities.js";
 import { stableId } from "./hash.js";
+import { retrievalVisibleSql } from "./open-hand/suppression.js";
 
 interface TableRow {
   cells: string[];
@@ -174,7 +175,8 @@ export function queryChronology(
     FROM chronology_events e
     JOIN source_files f ON f.source_file_id=e.timeline_source_file_id
     JOIN source_sections s ON s.section_id=e.source_section_id
-    WHERE (? IS NULL OR lower(e.timeline_anchor) LIKE ?)
+    WHERE ${retrievalVisibleSql("f", "s.section_id")}
+      AND (? IS NULL OR lower(e.timeline_anchor) LIKE ?)
       AND (
         ? IS NULL
         OR lower(e.label) LIKE ?
@@ -210,6 +212,8 @@ export function listChronologyPeriods(database: FeatherDatabase, limit = 50): ob
       f.relative_path AS relativePath, p.source_line AS sourceLine
     FROM chronology_periods p
     JOIN source_files f ON f.source_file_id=p.timeline_source_file_id
+    JOIN source_sections s ON s.section_id=p.source_section_id
+    WHERE ${retrievalVisibleSql("f", "s.section_id")}
     ORDER BY f.relative_path, p.period_order LIMIT ?
   `).all(Math.min(limit, 200)) as object[];
 }

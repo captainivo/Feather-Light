@@ -2,6 +2,7 @@ import { basename } from "node:path";
 import type { FeatherDatabase } from "./database.js";
 import { type EntityRecord, listEntities, normalizeEntityLabel, rebuildEntities } from "./entities.js";
 import { stableId } from "./hash.js";
+import { retrievalVisibleSql } from "./open-hand/suppression.js";
 
 const DEFINITION_LIMIT = 800;
 const preferredHeadings = new Map([
@@ -450,15 +451,24 @@ export function rebuildKnowledge(database: FeatherDatabase): {
 
 function resolveEntity(database: FeatherDatabase, query: string): string[] {
   if (query.startsWith("ent_")) {
-    const exists = database.prepare("SELECT entity_id FROM entities WHERE entity_id=? AND retired=0").get(query);
+    const exists = database.prepare(`
+      SELECT e.entity_id FROM entities e
+      JOIN source_files f ON f.source_file_id=e.source_file_id
+      WHERE e.entity_id=? AND e.retired=0 AND ${retrievalVisibleSql("f")}
+    `).get(query);
     return exists ? [query] : [];
   }
   const normalized = normalizeEntityLabel(query);
   const rows = database.prepare(`
-    SELECT entity_id AS entityId FROM entities WHERE normalized_label=? AND retired=0
+    SELECT e.entity_id AS entityId
+    FROM entities e JOIN source_files f ON f.source_file_id=e.source_file_id
+    WHERE e.normalized_label=? AND e.retired=0 AND ${retrievalVisibleSql("f")}
     UNION
-    SELECT a.entity_id AS entityId FROM entity_aliases a JOIN entities e ON e.entity_id=a.entity_id
-      WHERE a.normalized_alias=? AND e.retired=0
+    SELECT a.entity_id AS entityId
+    FROM entity_aliases a
+    JOIN entities e ON e.entity_id=a.entity_id
+    JOIN source_files f ON f.source_file_id=e.source_file_id
+    WHERE a.normalized_alias=? AND e.retired=0 AND ${retrievalVisibleSql("f")}
   `).all(normalized, normalized) as Array<{ entityId: string }>;
   return rows.map((row) => row.entityId);
 }
@@ -480,7 +490,8 @@ export function getEntityBrief(database: FeatherDatabase, query: string, relatio
     FROM definitions d
     LEFT JOIN source_sections s ON s.section_id=d.source_section_id
     LEFT JOIN source_files f ON f.source_file_id=s.source_file_id
-    WHERE d.entity_id=? ORDER BY d.is_preferred DESC, d.confidence DESC LIMIT 1
+    WHERE d.entity_id=? AND ${retrievalVisibleSql("f", "s.section_id")}
+    ORDER BY d.is_preferred DESC, d.confidence DESC LIMIT 1
   `).get(entityId) ?? null;
   const relationships = database.prepare(`
     SELECT r.relationship_id AS relationshipId, r.relation_type AS relationType,
@@ -489,8 +500,12 @@ export function getEntityBrief(database: FeatherDatabase, query: string, relatio
       s.heading_path AS sourceHeading, s.start_line AS startLine, s.end_line AS endLine
     FROM relationships r
     JOIN entities target ON target.entity_id=r.target_entity_id
+    JOIN source_files target_file ON target_file.source_file_id=target.source_file_id
     LEFT JOIN source_sections s ON s.section_id=r.source_section_id
+    LEFT JOIN source_files source_file ON source_file.source_file_id=s.source_file_id
     WHERE r.source_entity_id=?
+      AND ${retrievalVisibleSql("target_file")}
+      AND ${retrievalVisibleSql("source_file", "s.section_id")}
       AND r.relationship_id = (
         SELECT r2.relationship_id FROM relationships r2
         WHERE r2.source_entity_id=r.source_entity_id
@@ -501,7 +516,13 @@ export function getEntityBrief(database: FeatherDatabase, query: string, relatio
       )
     ORDER BY target.canonical_label LIMIT ?
   `).all(entityId, relationLimit);
-  const relationCount = (database.prepare("SELECT count(DISTINCT target_entity_id) AS count FROM relationships WHERE source_entity_id=?").get(entityId) as { count: number }).count;
+  const relationCount = (database.prepare(`
+    SELECT count(DISTINCT r.target_entity_id) AS count
+    FROM relationships r
+    JOIN entities target ON target.entity_id=r.target_entity_id
+    JOIN source_files f ON f.source_file_id=target.source_file_id
+    WHERE r.source_entity_id=? AND ${retrievalVisibleSql("f")}
+  `).get(entityId) as { count: number }).count;
   return { status: "ok", entity, definition, relationships, relationCount, truncated: relationCount > relationLimit };
 }
 
@@ -530,7 +551,7 @@ export function getEntityAssertions(database: FeatherDatabase, query: string, li
       FROM assertions a
       JOIN source_sections s ON s.section_id=a.source_section_id
       JOIN source_files f ON f.source_file_id=s.source_file_id
-      WHERE a.subject_entity_id=?
+      WHERE a.subject_entity_id=? AND ${retrievalVisibleSql("f", "s.section_id")}
     )
     SELECT assertionId, predicate, claimText, canonStatus, knowledgeStatus,
       confidence, reviewStatus, extractionRule, sourceSectionId, sourceHeading,
@@ -538,11 +559,17 @@ export function getEntityAssertions(database: FeatherDatabase, query: string, li
     FROM ranked
     ORDER BY sectionRank, sectionOrdinal, assertionId LIMIT ?
   `).all(entityId, limit) as Array<Record<string, unknown>>;
-  let total = (database.prepare("SELECT count(*) AS count FROM assertions WHERE subject_entity_id=?").get(entityId) as { count: number }).count;
+  let total = (database.prepare(`
+    SELECT count(*) AS count FROM assertions a
+    JOIN source_sections s ON s.section_id=a.source_section_id
+    JOIN source_files f ON f.source_file_id=s.source_file_id
+    WHERE a.subject_entity_id=? AND ${retrievalVisibleSql("f", "s.section_id")}
+  `).get(entityId) as { count: number }).count;
   const structuredAssertionCount = total;
   const sourceHeadings = database.prepare(`
-    SELECT heading_path AS headingPath FROM source_sections
-    WHERE source_file_id=? ORDER BY ordinal
+    SELECT s.heading_path AS headingPath FROM source_sections s
+    JOIN source_files f ON f.source_file_id=s.source_file_id
+    WHERE s.source_file_id=? AND ${retrievalVisibleSql("f", "s.section_id")} ORDER BY s.ordinal
   `).all(entity.sourceFileId) as Array<{ headingPath: string }>;
   const eligibleSectionCount = sourceHeadings.filter((section) => {
     const heading = lastHeading(section.headingPath);
@@ -559,7 +586,7 @@ export function getEntityAssertions(database: FeatherDatabase, query: string, li
       FROM definitions d
       JOIN source_sections s ON s.section_id=d.source_section_id
       JOIN source_files f ON f.source_file_id=s.source_file_id
-      WHERE d.entity_id=?
+      WHERE d.entity_id=? AND ${retrievalVisibleSql("f", "s.section_id")}
       ORDER BY d.is_preferred DESC, d.confidence DESC LIMIT 1
     `).get(entityId) as {
       definitionId: string; text: string; confidence: number; reviewStatus: string;
