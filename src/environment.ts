@@ -13,6 +13,19 @@ export interface EnvironmentState extends JsonObject {
   estrus: JsonObject;
 }
 
+export interface AauthoranClock extends JsonObject {
+  timezone: string;
+  mapping: "proportional_earth_civil_day";
+  total_day_length_hours: number;
+  hours_elapsed: number;
+  hours_remaining: number;
+  progress: number;
+  time: string;
+  light_state: "light" | "dark";
+  daylight_start_hour: number;
+  daylight_end_hour: number;
+}
+
 const DIRECTIONS = ["north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest"];
 const SKIES = ["clear", "partly_cloudy", "mostly_cloudy", "overcast", "storm_clouds"];
 const PATTERNS: Record<string, { min: number; typical: number; max: number; next: string[] }> = {
@@ -96,6 +109,45 @@ export function localDate(timezone: string, date = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit",
   }).format(date);
+}
+
+/**
+ * Maps one Vancouver civil date proportionally onto one variable-length Aauthoran day.
+ * Daylight is centered on the midpoint of that Aauthoran day; the daily environment
+ * record remains generated once per Earth date.
+ */
+export function aauthoranClock(config: Config, state: EnvironmentState, now = new Date()): AauthoranClock {
+  const weather = object(state.weather);
+  const total = Number(weather.total_day_length_hours);
+  const daylight = Number(weather.daylight_hours);
+  if (!Number.isFinite(total) || total < 24 || total > 45 || !Number.isFinite(daylight) || daylight < 0 || daylight > total) {
+    throw new Error("environment snapshot has invalid Aauthoran light-cycle values");
+  }
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: config.environment.timezone,
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+  }).formatToParts(now);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const earthSeconds = Number(values.hour) * 3_600 + Number(values.minute) * 60 + Number(values.second)
+    + now.getMilliseconds() / 1_000;
+  const progress = earthSeconds / 86_400;
+  const elapsed = progress * total;
+  const daylightStart = (total - daylight) / 2;
+  const daylightEnd = daylightStart + daylight;
+  const hour = Math.floor(elapsed);
+  const minute = Math.floor((elapsed - hour) * 60);
+  return {
+    timezone: config.environment.timezone,
+    mapping: "proportional_earth_civil_day",
+    total_day_length_hours: round(total, 1),
+    hours_elapsed: round(elapsed, 2),
+    hours_remaining: round(total - elapsed, 2),
+    progress: round(progress, 4),
+    time: `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`,
+    light_state: elapsed >= daylightStart && elapsed < daylightEnd ? "light" : "dark",
+    daylight_start_hour: round(daylightStart, 2),
+    daylight_end_hour: round(daylightEnd, 2),
+  };
 }
 
 export function catchUpEnvironment(database: FeatherDatabase, config: Config, through = localDate(config.environment.timezone)) {

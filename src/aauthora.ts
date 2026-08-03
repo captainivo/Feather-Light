@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Config } from "./config.js";
 import type { FeatherDatabase } from "./database.js";
-import { catchUpEnvironment, importLegacyEnvironment, latestEnvironment } from "./environment.js";
+import { aauthoranClock, catchUpEnvironment, importLegacyEnvironment, latestEnvironment } from "./environment.js";
 
 const MAX_UPSTREAM_BYTES = 1_000_000;
 
@@ -115,6 +115,7 @@ export async function currentState(
   const emotionalState = objectValue(current.emotional_state);
   const agency = agencyState ?? objectValue(current.agency);
   const fetchedAt = new Date().toISOString();
+  const civilTime = aauthoranClock(config, environment);
   const weatherContract = {
     provenance: "feather-light-environment",
     uncertainty: { kind: "not_quantified", reason: "The deterministic weather simulation exposes no confidence model." },
@@ -130,6 +131,7 @@ export async function currentState(
     },
     earth_date: environment.earth_date,
     absolute_day: environment.absolute_day,
+    civil_time: civilTime,
     season: select(season, ["name", "phase", "days_in_current_season", "transition_active"]),
     weather: select(weather, [
       "temperature_current_c", "temperature_high_c", "temperature_low_c", "precipitation_type",

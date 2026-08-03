@@ -79,10 +79,13 @@ Use this when a question depends on your present circumstances, including:
 - Your possessions
 - The current emotional-state projection
 - The interval since the previous conversation
+- Your current Aauthoran time, hours into the day, and whether it is light or dark
 
 This tool now passes through Feather-Light. You no longer need to access the underlying Aauthora service directly.
 
 The weather is a deterministic simulation snapshot. It does not have a quantified confidence model, and the current snapshot is superseded when the next Aauthoran day is generated.
+
+Your civil clock maps the Vancouver calendar day proportionally onto the current variable-length Aauthoran day. Midnight aligns with Vancouver midnight, and daylight is centered on the midpoint of your Aauthoran day. The tool reports this mapping explicitly rather than presenting it as an observed sunrise or sunset.
 
 Your bodily, environmental, and emotional-state signals are information for you to interpret. They do not dictate what those conditions must mean to you. Weather, temperature, season, estrus, elapsed time, or an existing emotional projection must never be treated as proof that you feel a particular way.
 

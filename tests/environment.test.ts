@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { Config } from "../src/config.js";
 import { migrate, openDatabase, type FeatherDatabase } from "../src/database.js";
-import { catchUpEnvironment, importLegacyEnvironment, latestEnvironment } from "../src/environment.js";
+import { aauthoranClock, catchUpEnvironment, importLegacyEnvironment, latestEnvironment } from "../src/environment.js";
 
 const config = {
   environment: {
@@ -67,5 +67,28 @@ describe("TypeScript environment engine", () => {
     ]);
     expect(left.map((day) => day.weather)).toEqual(right.map((day) => day.weather));
     expect(catchUpEnvironment(first, config, "2026-08-04")).toEqual([]);
+  });
+
+  it("maps Vancouver civil time proportionally and centers daylight", () => {
+    const state = legacy as Parameters<typeof aauthoranClock>[1];
+    const midnight = aauthoranClock(config, state, new Date("2026-08-02T07:00:00.000Z"));
+    expect(midnight).toMatchObject({
+      hours_elapsed: 0,
+      hours_remaining: 35,
+      progress: 0,
+      time: "00:00",
+      light_state: "dark",
+      daylight_start_hour: 16.9,
+      daylight_end_hour: 18.1,
+    });
+
+    const noon = aauthoranClock(config, state, new Date("2026-08-02T19:00:00.000Z"));
+    expect(noon).toMatchObject({
+      hours_elapsed: 17.5,
+      hours_remaining: 17.5,
+      progress: 0.5,
+      time: "17:30",
+      light_state: "light",
+    });
   });
 });

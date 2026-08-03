@@ -22,6 +22,12 @@ checks for missed days. Weather-only reads no longer depend on Python. The Pytho
 remains available for emotional reflection, conversation activity, inventory, gifts, and outfit
 records while those stores are migrated separately.
 
+The civil clock maps each Vancouver calendar day proportionally onto that day's 24–45-hour
+Aauthoran duration. Aauthoran midnight aligns with Vancouver midnight, and the recorded daylight
+interval is centered on the Aauthoran day's midpoint. `current_state` exposes elapsed and remaining
+Aauthoran hours, formatted Aauthoran time, progress, daylight boundaries, and whether it is
+currently light or dark. This projection does not change the once-per-Earth-date generation rule.
+
 ## Install
 
 ```bash

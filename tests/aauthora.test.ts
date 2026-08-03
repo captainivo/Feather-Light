@@ -35,7 +35,7 @@ describe("Aauthora gateway", () => {
     const environment = {
       earth_date: "2026-08-02", absolute_day: 43,
       season: { name: "Light", phase: "early", ignored: true },
-      weather: { temperature_current_c: 18, sky_condition: "clear", ignored: true },
+      weather: { total_day_length_hours: 30, daylight_hours: 26, temperature_current_c: 18, sky_condition: "clear", ignored: true },
       thaena: { visible: false }, estrus: { status: "unlikely" },
     };
     const database = databaseWithEnvironment(environment);
@@ -82,7 +82,7 @@ describe("Aauthora gateway", () => {
     const database = databaseWithEnvironment({
       earth_date: "2026-08-02", absolute_day: 43,
       season: { name: "Dark", phase: "deep" },
-      weather: { temperature_current_c: -57.5, sky_condition: "mostly_cloudy" },
+      weather: { total_day_length_hours: 35.5, daylight_hours: 1.1, temperature_current_c: -57.5, sky_condition: "mostly_cloudy" },
       thaena: { visible: false }, estrus: { status: "unlikely" },
     });
     const fetchMock = responseQueue([
@@ -108,7 +108,8 @@ describe("Aauthora gateway", () => {
     const reflection = { event_id: "evt-1", note: "audit detail" };
     const item = { name: "coat" };
     const database = databaseWithEnvironment({
-      earth_date: "2026-08-02", absolute_day: 43, season: {}, weather: {}, thaena: {}, estrus: {},
+      earth_date: "2026-08-02", absolute_day: 43, season: {},
+      weather: { total_day_length_hours: 35.5, daylight_hours: 1.1 }, thaena: {}, estrus: {},
     });
     responseQueue([
       { elapsed: "one day" },
