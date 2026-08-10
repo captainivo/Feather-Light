@@ -171,6 +171,11 @@ Workers claim the oldest pending transaction atomically through `POST /v1/archiv
 the operation records a bounded worker ID and processing start time, and returns `204` when the queue
 is empty. Claim responses contain transaction metadata but never the stored submission body.
 
+External Obsidian changes can be classified with the deterministic reconciliation planner before
+any ledger mutation. It uses permanent frontmatter IDs and full-content hashes to distinguish
+unchanged touches, edits, renames, combined rename/edits, new notes, and path/identity conflicts.
+The planner never reads or writes a configured archive by itself and returns no note body.
+
 Development-event metrics are supplied by a deterministic Markdown diff. It excludes frontmatter
 and fenced code, treats wikilink markup as presentation rather than added prose, counts repeated
 link occurrences, and reports gross additions/removals separately from net change. Reordering the
