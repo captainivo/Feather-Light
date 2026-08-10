@@ -23,6 +23,7 @@ import { latestEnvironment } from "./environment.js";
 import { generateDream, operateDream } from "./dream.js";
 import { operateGrowth, operateLonging } from "./inner.js";
 import { auditArchiveRoot } from "./archive-migration-audit.js";
+import { planArchiveMigration } from "./archive-migration-plan.js";
 
 const HELP = `Feather-Light — read-only Westpole search
 
@@ -30,6 +31,7 @@ Usage:
   npm run cli -- status
   npm run cli -- ingest [--dry-run] [--root ROOT_ID]
   npm run cli -- archive audit [--root ROOT_ID] [--output MANIFEST.json]
+  npm run cli -- archive plan [--root ROOT_ID] [--limit N] [--output PLAN.json]
   npm run cli -- search [--limit N] [--dedupe MODE] <words>
   npm run cli -- show <SECTION_ID>
   npm run cli -- get [--relations N] <ENTITY_ID_OR_EXACT_NAME>
@@ -126,19 +128,21 @@ function outputIsInsideArchive(outputPath: string, archivePath: string): boolean
   return outputParent === archiveReal || outputParent.startsWith(`${archiveReal}${sep}`);
 }
 
-function runArchiveAudit(args: string[]): void {
+function runArchiveCommand(args: string[]): void {
   const [operation = "audit", ...auditArgs] = args;
-  if (operation !== "audit") throw new Error("archive operation must be audit");
+  if (!new Set(["audit", "plan"]).has(operation)) throw new Error("archive operation must be audit or plan");
   const config = loadConfig();
   const { values } = parseArgs({ args: auditArgs, options: {
     root: { type: "string" },
     output: { type: "string", short: "o" },
+    limit: { type: "string", short: "n" },
   } });
   const roots = values.root
     ? [values.root]
     : config.archiveRoots.filter((root) => root.enabled).map((root) => root.rootId);
-  const audits = roots.map((rootId) => auditArchiveRoot(config, rootId));
-  const result = { status: "ok", readOnly: true, audits };
+  const result = operation === "audit"
+    ? { status: "ok", readOnly: true, audits: roots.map((rootId) => auditArchiveRoot(config, rootId)) }
+    : { status: "ok", readOnly: true, plans: roots.map((rootId) => planArchiveMigration(config, rootId, positiveInteger(values.limit, 20))) };
   const serialized = `${JSON.stringify(result, null, 2)}\n`;
   if (values.output) {
     if (config.archiveRoots.some((root) => outputIsInsideArchive(values.output!, root.path))) {
@@ -149,14 +153,10 @@ function runArchiveAudit(args: string[]): void {
       status: "ok",
       readOnly: true,
       output: resolve(values.output),
-      roots: audits.map((audit) => ({
-        rootId: audit.rootId,
-        filesSeen: audit.filesSeen,
-        readyFiles: audit.readyFiles,
-        migrationRequiredFiles: audit.migrationRequiredFiles,
-        errors: audit.errors.length,
-        manifestHash: audit.manifestHash,
-      })),
+      operation,
+      roots: operation === "audit"
+        ? result.audits!.map((audit) => ({ rootId: audit.rootId, files: audit.filesSeen, readyFiles: audit.readyFiles, migrationRequiredFiles: audit.migrationRequiredFiles, errors: audit.errors.length, manifestHash: audit.manifestHash }))
+        : result.plans!.map((plan) => ({ rootId: plan.rootId, files: plan.totalEligibleFiles, plannedFiles: plan.plannedFiles, remainingFiles: plan.remainingFiles })),
     }, null, 2));
   } else {
     console.log(serialized.trimEnd());
@@ -171,7 +171,7 @@ async function main(): Promise<void> {
   }
 
   if (command === "archive") {
-    runArchiveAudit(rest);
+    runArchiveCommand(rest);
     return;
   }
 

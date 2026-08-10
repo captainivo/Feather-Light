@@ -29,6 +29,7 @@ npm run cli -- ingest --dry-run
 npm run cli -- ingest
 npm run cli -- archive audit
 npm run cli -- archive audit --output /safe/path/story-archive-audit.json
+npm run cli -- archive plan --limit 20 --output /safe/path/migration-batch.json
 npm run cli -- search "Aanu"
 npm run cli -- search --limit 5 --dedupe title "Aanu-Kathara"
 npm run cli -- show sec_ab11f1ed3840bfafc4b84c59
@@ -67,6 +68,10 @@ record explicitly.
 reports missing and invalid Story Archive metadata, proposes IDs for review, and calculates a
 deterministic manifest hash. It never edits the vault or writes to the index database. Manifest
 output is refused if its path is inside any configured archive root.
+
+`archive plan` creates a bounded, deterministic review batch. Every proposed field is labelled
+`mechanical`, `review`, or `manual`; legacy workflow and canon statuses are never silently treated
+as equivalent. The planner is also read-only and applies the same outside-the-vault output rule.
 
 A non-dry-run ingest automatically rebuilds the deterministic entity projection. `entities build`
 is also available when testing classification rules without rescanning the archive.

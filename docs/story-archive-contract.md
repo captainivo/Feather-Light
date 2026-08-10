@@ -102,3 +102,7 @@ the note.
 Use `--root ROOT_ID` to select one configured root and `--output MANIFEST.json` to save the complete
 manifest outside the vault. The output contains a deterministic `manifestHash` suitable for review
 and later batch approval. No audit operation writes Markdown or mutates the retrieval index.
+
+`npm run cli -- archive plan --limit 20` produces the next bounded compatibility batch. Proposals
+carry mechanical, review, or manual levels and retain their source/reason. The plan is advisory and
+contains the source hash needed to detect any note change before a future approved write.

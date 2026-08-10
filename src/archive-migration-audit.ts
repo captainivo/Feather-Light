@@ -42,7 +42,7 @@ export interface ArchiveMigrationAudit {
   files: ArchiveMigrationAuditFile[];
 }
 
-function proposedPermanentId(rootId: string, relativePath: string, title: string, type: unknown): string {
+export function proposedPermanentId(rootId: string, relativePath: string, title: string, type: unknown): string {
   const typeSlug = typeof type === "string"
     ? type.normalize("NFKD").toLowerCase().replaceAll(/[^a-z0-9]+/g, "-").replaceAll(/^-|-$/g, "")
     : "note";
