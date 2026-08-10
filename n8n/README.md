@@ -22,10 +22,11 @@ inactive and should remain inactive until a test execution returns `status: "acc
 
 `story-archive-queue-worker.json` is the first portion of the archive-transaction orchestrator. It
 polls for one pending transaction, claims it atomically, fetches the normalized request using the
-claiming worker ID, and validates it again at the processing boundary. The runtime additionally
+claiming worker ID, and validates it again at the processing boundary. Invalid work is moved to
+`failed` with bounded procedural provenance instead of being left in `processing`. The runtime additionally
 requires `FEATHER_LIGHT_WORKER_ID`, a stable non-secret identifier unique to that n8n worker.
 
-The workflow deliberately ends at `Ready For Processing`: Markdown staging, deterministic archive
-validation, Git commit, ledger finalization, and error recovery are being added as subsequent
+The successful branch deliberately ends at `Ready For Processing`: Markdown staging, deterministic archive
+validation, Git commit, ledger finalization, and broader transport/runtime error recovery are being added as subsequent
 versioned portions. Keep this workflow inactive until those downstream nodes exist; activating this
 partial export would leave claimed transactions in `processing`.

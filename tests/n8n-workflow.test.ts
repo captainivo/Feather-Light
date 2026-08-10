@@ -21,13 +21,20 @@ describe("versioned n8n workflows", () => {
 
   it("keeps the queue worker inactive, secret-free, and bounded at the processing handoff", () => {
     const raw = readFileSync("n8n/story-archive-queue-worker.json", "utf8");
-    const workflow = JSON.parse(raw) as { active: boolean; nodes: Array<{ name: string }>; connections: Record<string, unknown> };
+    const workflow = JSON.parse(raw) as { active: boolean; nodes: Array<{ name: string; parameters: Record<string, unknown> }>; connections: Record<string, unknown> };
     expect(workflow.active).toBe(false);
     expect(workflow.nodes.map((node) => node.name)).toEqual([
       "Poll Queue", "Claim Next Transaction", "Transaction Claimed?", "Fetch Claimed Work",
-      "Validate Claimed Submission", "Ready For Processing", "No Pending Work",
+      "Validate Claimed Submission", "Submission Valid?", "Ready For Processing",
+      "Mark Validation Failed", "No Pending Work",
     ]);
     expect(workflow.connections).not.toHaveProperty("Ready For Processing");
+    expect(workflow.connections).not.toHaveProperty("Mark Validation Failed");
+    expect(raw).toContain("Submission failed deterministic validation at the processing boundary.");
+    const parameters = (name: string) => workflow.nodes.find((node) => node.name === name)!.parameters;
+    expect(parameters("Claim Next Transaction")).toMatchObject({ options: { response: { response: { fullResponse: true, neverError: true } } } });
+    expect(parameters("Fetch Claimed Work")).toMatchObject({ options: {} });
+    expect(parameters("Validate Claimed Submission")).toMatchObject({ options: { response: { response: { fullResponse: true, neverError: true } } } });
     expect(raw).toContain("FEATHER_LIGHT_WORKER_ID");
     expect(raw).not.toMatch(/Bearer [A-Za-z0-9_-]{12,}/);
   });

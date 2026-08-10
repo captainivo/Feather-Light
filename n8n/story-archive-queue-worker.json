@@ -66,13 +66,23 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json.request) }}",
-        "options": {}
+        "options": { "response": { "response": { "fullResponse": true, "neverError": true } } }
       },
       "id": "49850ec3-00b3-45ec-bb9b-daed82f77bf3",
       "name": "Validate Claimed Submission",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [360, -100]
+    },
+    {
+      "parameters": { "conditions": { "options": { "caseSensitive": true, "typeValidation": "strict" }, "conditions": [
+        { "id": "805c0dbc-6d82-4311-9884-596d7f11e88a", "leftValue": "={{ $json.statusCode }}", "rightValue": 200, "operator": { "type": "number", "operation": "equals" } }
+      ], "combinator": "and" } },
+      "id": "0ee0204a-f5cc-4507-9b8e-e1e697875229",
+      "name": "Submission Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [600, -100]
     },
     {
       "parameters": { "assignments": { "assignments": [
@@ -82,7 +92,27 @@
       "name": "Ready For Processing",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [600, -100]
+      "position": [840, -180]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ $env.FEATHER_LIGHT_BASE_URL + '/v1/archive/transactions/' + $('Claim Next Transaction').item.json.body.transaction.transactionId }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "Authorization", "value": "={{ 'Bearer ' + $env.FEATHER_LIGHT_API_TOKEN }}" },
+          { "name": "Content-Type", "value": "application/json" }
+        ] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ status: 'failed', occurredAt: $now.toISO(), errorSummary: 'Submission failed deterministic validation at the processing boundary.' }) }}",
+        "options": {}
+      },
+      "id": "124f05e8-b1c9-464e-bff1-d9dcdce77048",
+      "name": "Mark Validation Failed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [840, 20]
     },
     {
       "parameters": { "assignments": { "assignments": [
@@ -104,11 +134,15 @@
       [{ "node": "No Pending Work", "type": "main", "index": 0 }]
     ] },
     "Fetch Claimed Work": { "main": [[{ "node": "Validate Claimed Submission", "type": "main", "index": 0 }]] },
-    "Validate Claimed Submission": { "main": [[{ "node": "Ready For Processing", "type": "main", "index": 0 }]] }
+    "Validate Claimed Submission": { "main": [[{ "node": "Submission Valid?", "type": "main", "index": 0 }]] },
+    "Submission Valid?": { "main": [
+      [{ "node": "Ready For Processing", "type": "main", "index": 0 }],
+      [{ "node": "Mark Validation Failed", "type": "main", "index": 0 }]
+    ] }
   },
   "active": false,
   "settings": { "executionOrder": "v1" },
-  "versionId": "d3ce845c-07aa-466e-a57d-ae574204c31a",
+  "versionId": "040fd173-bccb-469b-9527-8d1f5fbe20c2",
   "meta": { "templateCredsSetupCompleted": false },
   "tags": []
 }
