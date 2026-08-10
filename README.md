@@ -178,6 +178,8 @@ While a transaction is `processing`, n8n may submit an idempotent note-event req
 before and after text. Feather-Light computes the diff and stores only note metadata, hashes,
 counts, categories, actor, and provenance; the transient note bodies are not persisted or returned.
 Reusing an event ID with identical data is safe, while conflicting reuse is rejected.
+`GET /v1/archive/transactions/:transactionId/events` returns that transaction's body-free event
+timeline in deterministic order, with bounded `limit` and `after` cursor pagination.
 
 ## Safety guarantees
 

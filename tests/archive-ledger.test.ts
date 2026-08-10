@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { archiveDevelopmentReport, recordArchiveNoteChange, recordArchiveNoteEvent } from "../src/archive-ledger.js";
+import { archiveDevelopmentReport, listArchiveTransactionEvents, recordArchiveNoteChange, recordArchiveNoteEvent } from "../src/archive-ledger.js";
 import { migrate, openDatabase, type FeatherDatabase } from "../src/database.js";
 import { parseArchiveSubmission } from "../src/story-archive-contract.js";
 import { recordArchiveSubmission, transitionArchiveTransaction } from "../src/archive-transactions.js";
@@ -71,5 +71,19 @@ describe("archive development ledger", () => {
     expect(recordArchiveNoteEvent(database, event(transactionId), "ANE-retry")).toBe("ANE-retry");
     expect(() => recordArchiveNoteEvent(database, { ...event(transactionId), title: "Changed" }, "ANE-retry")).toThrow("event ID conflict");
     expect((database.prepare("SELECT count(*) AS count FROM archive_note_events").get() as { count: number }).count).toBe(1);
+  });
+
+  it("lists a deterministic, body-free transaction event timeline", () => {
+    const { database, transactionId } = fixture();
+    recordArchiveNoteEvent(database, event(transactionId), "ANE-page-001");
+    recordArchiveNoteEvent(database, { ...event(transactionId), occurredAt: "2026-08-05T12:06:00Z", title: "Example revised" }, "ANE-page-002");
+    const first = listArchiveTransactionEvents(database, transactionId, { limit: 1 });
+    expect(first).toMatchObject({ events: [{ eventId: "ANE-page-001", categories: [
+      { name: "character", role: "primary" }, { name: "third-civilization", role: "secondary" },
+    ] }], nextCursor: "ANE-page-001" });
+    const second = listArchiveTransactionEvents(database, transactionId, { limit: 1, after: first.nextCursor! });
+    expect(second).toMatchObject({ events: [{ eventId: "ANE-page-002" }], nextCursor: null });
+    expect(JSON.stringify(second)).not.toContain("metadata");
+    expect(() => listArchiveTransactionEvents(database, transactionId, { after: "ANE-missing" })).toThrow("unknown archive event cursor");
   });
 });

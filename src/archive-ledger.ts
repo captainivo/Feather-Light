@@ -110,6 +110,85 @@ export function recordArchiveNoteChange(database: FeatherDatabase, transactionId
   return { eventId: change.eventId, diff };
 }
 
+export interface ArchiveTransactionEvent {
+  eventId: string;
+  noteId: string;
+  occurredAt: string;
+  action: ArchiveNoteEventInput["action"];
+  title: string;
+  wordsBefore: number;
+  wordsAfter: number;
+  wordsAdded: number;
+  wordsRemoved: number;
+  netWords: number;
+  linksAdded: number;
+  linksRemoved: number;
+  sourceHash: string;
+  gitCommit: string | null;
+  actor: string;
+  categories: Array<{ name: string; role: "primary" | "secondary" }>;
+}
+
+interface ArchiveTransactionEventRow {
+  event_id: string; note_id: string; occurred_at: string; action: ArchiveNoteEventInput["action"];
+  title_at_time: string; words_before: number; words_after: number; words_added: number;
+  words_removed: number; net_words: number; links_added: number; links_removed: number;
+  source_hash: string; git_commit: string | null; actor: string;
+}
+
+export interface ArchiveTransactionEventPage {
+  events: ArchiveTransactionEvent[];
+  nextCursor: string | null;
+}
+
+export function listArchiveTransactionEvents(
+  database: FeatherDatabase,
+  transactionId: string,
+  options: { limit?: number; after?: string } = {},
+): ArchiveTransactionEventPage {
+  const parsed = z.object({
+    limit: z.number().int().min(1).max(100).default(20),
+    after: z.string().trim().min(1).max(120).optional(),
+  }).strict().parse(options);
+  const transaction = database.prepare("SELECT 1 FROM archive_transactions WHERE transaction_id=?").get(transactionId);
+  if (!transaction) throw new Error(`unknown archive transaction: ${transactionId}`);
+  let cursor: { occurred_at: string; event_id: string } | undefined;
+  if (parsed.after) {
+    cursor = database.prepare(`
+      SELECT occurred_at, event_id FROM archive_note_events
+      WHERE transaction_id=? AND event_id=?
+    `).get(transactionId, parsed.after) as typeof cursor;
+    if (!cursor) throw new Error(`unknown archive event cursor: ${parsed.after}`);
+  }
+  const columns = `event_id, note_id, occurred_at, action, title_at_time, words_before,
+    words_after, words_added, words_removed, net_words, links_added, links_removed,
+    source_hash, git_commit, actor`;
+  const rows = (cursor
+    ? database.prepare(`SELECT ${columns} FROM archive_note_events
+        WHERE transaction_id=? AND (occurred_at > ? OR (occurred_at = ? AND event_id > ?))
+        ORDER BY occurred_at, event_id LIMIT ?`)
+      .all(transactionId, cursor.occurred_at, cursor.occurred_at, cursor.event_id, parsed.limit + 1)
+    : database.prepare(`SELECT ${columns} FROM archive_note_events
+        WHERE transaction_id=? ORDER BY occurred_at, event_id LIMIT ?`)
+      .all(transactionId, parsed.limit + 1)) as ArchiveTransactionEventRow[];
+  const hasMore = rows.length > parsed.limit;
+  const pageRows = rows.slice(0, parsed.limit);
+  const categories = database.prepare(`
+    SELECT c.name, ec.role FROM archive_note_event_categories ec
+    JOIN archive_categories c USING(category_id) WHERE ec.event_id=?
+    ORDER BY CASE ec.role WHEN 'primary' THEN 0 ELSE 1 END, c.name
+  `);
+  const events = pageRows.map((row): ArchiveTransactionEvent => ({
+    eventId: row.event_id, noteId: row.note_id, occurredAt: row.occurred_at, action: row.action,
+    title: row.title_at_time, wordsBefore: row.words_before, wordsAfter: row.words_after,
+    wordsAdded: row.words_added, wordsRemoved: row.words_removed, netWords: row.net_words,
+    linksAdded: row.links_added, linksRemoved: row.links_removed, sourceHash: row.source_hash,
+    gitCommit: row.git_commit, actor: row.actor,
+    categories: categories.all(row.event_id) as ArchiveTransactionEvent["categories"],
+  }));
+  return { events, nextCursor: hasMore ? events.at(-1)!.eventId : null };
+}
+
 export interface ArchiveDevelopmentReport {
   from: string;
   to: string;

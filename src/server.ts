@@ -18,7 +18,7 @@ import { dreamActionSchema, generateDream, operateDream } from "./dream.js";
 import { growthActionSchema, longingActionSchema, operateGrowth, operateLonging } from "./inner.js";
 import { archiveSubmissionSchema } from "./story-archive-contract.js";
 import { archiveTransactionStatuses, getArchiveTransaction, listArchiveTransactions, recordArchiveSubmission, transitionArchiveTransaction } from "./archive-transactions.js";
-import { archiveDevelopmentReport, recordArchiveNoteChange } from "./archive-ledger.js";
+import { archiveDevelopmentReport, listArchiveTransactionEvents, recordArchiveNoteChange } from "./archive-ledger.js";
 
 const responseView = z.enum(["brief", "standard"]).default("brief");
 
@@ -142,6 +142,25 @@ export function buildServer(config: Config, database: FeatherDatabase) {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return reply.code(message.includes("unknown archive transaction") ? 404 : 409).send({ status: "event_rejected", error: message });
+    }
+  });
+  app.get("/v1/archive/transactions/:transactionId/events", async (request, reply) => {
+    const params = z.object({ transactionId: z.string().min(1) }).strict().safeParse(request.params);
+    const query = z.object({
+      limit: z.coerce.number().int().min(1).max(100).default(20),
+      after: z.string().trim().min(1).max(120).optional(),
+    }).strict().safeParse(request.query);
+    if (!params.success) return reply.code(400).send({ status: "invalid_request", error: params.error.issues });
+    if (!query.success) return reply.code(400).send({ status: "invalid_request", error: query.error.issues });
+    try {
+      const page = listArchiveTransactionEvents(database, params.data.transactionId, {
+        limit: query.data.limit,
+        ...(query.data.after === undefined ? {} : { after: query.data.after }),
+      });
+      return { status: "ok", events: page.events, next_cursor: page.nextCursor };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return reply.code(message.startsWith("unknown archive transaction") ? 404 : 400).send({ status: "invalid_request", error: message });
     }
   });
   app.post("/v1/search", async (request, reply) => {

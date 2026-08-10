@@ -188,6 +188,12 @@ describe("API", () => {
     } });
     expect(event.statusCode).toBe(201);
     expect(event.json()).toMatchObject({ status: "recorded", event_id: "ANE-api-001", metrics: { links_added: 1 } });
+    const events = await app.inject({ method: "GET", url: `/v1/archive/transactions/${transactionId}/events?limit=1` });
+    expect(events.statusCode).toBe(200);
+    expect(events.json()).toMatchObject({ status: "ok", events: [{
+      eventId: "ANE-api-001", noteId: "person-example-001", categories: [{ name: "character", role: "primary" }],
+    }], next_cursor: null });
+    expect(JSON.stringify(events.json())).not.toContain("stood by the tower");
   });
 
   it("rejects invalid and client-specific archive submission fields", async () => {
