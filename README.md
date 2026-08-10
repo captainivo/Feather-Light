@@ -34,6 +34,7 @@ npm run cli -- archive review-template --plan /private/path/plan.json --output /
 npm run cli -- archive review-page --review /private/path/review.json --output /private/path/review.html
 npm run cli -- archive simulate --plan /private/path/plan.json --review /private/path/review.json --output /private/path/result.json
 npm run cli -- archive changeset --plan /private/path/plan.json --review /private/path/review.json --output /private/path/changeset.json
+npm run cli -- archive render-preview --changeset /private/path/changeset.json --output /private/path/preview.json
 npm run cli -- search "Aanu"
 npm run cli -- search --limit 5 --dedupe title "Aanu-Kathara"
 npm run cli -- show sec_ab11f1ed3840bfafc4b84c59
@@ -101,6 +102,9 @@ review as JSON for subsequent simulation.
 `changeset` is the final read-only gate before rendering patches. It succeeds only when every file
 simulates as ready, records mechanical versus reviewed authority and review provenance for each
 field, and hashes the complete result. It contains no note bodies and does not write Markdown.
+`render-preview` validates the hashed change set, renders YAML only in memory, verifies the complete
+Story Archive metadata contract, and emits target hashes plus frontmatter previews. Markdown bodies
+are preserved byte-for-byte and excluded from the preview artifact. Source files remain unchanged.
 
 A non-dry-run ingest automatically rebuilds the deterministic entity projection. `entities build`
 is also available when testing classification rules without rescanning the archive.
