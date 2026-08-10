@@ -1,6 +1,6 @@
 import { parseArgs } from "node:util";
 import { dirname, resolve, sep } from "node:path";
-import { realpathSync, writeFileSync } from "node:fs";
+import { readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { ensureEnvironmentCurrent } from "./aauthora.js";
 import { listChronologyPeriods, queryChronology, rebuildChronology } from "./chronology.js";
 import { loadConfig } from "./config.js";
@@ -23,7 +23,8 @@ import { latestEnvironment } from "./environment.js";
 import { generateDream, operateDream } from "./dream.js";
 import { operateGrowth, operateLonging } from "./inner.js";
 import { auditArchiveRoot } from "./archive-migration-audit.js";
-import { planArchiveMigration } from "./archive-migration-plan.js";
+import { planArchiveMigration, type ArchiveMigrationPlan } from "./archive-migration-plan.js";
+import { simulateArchiveMigration } from "./archive-migration-review.js";
 
 const HELP = `Feather-Light — read-only Westpole search
 
@@ -32,6 +33,7 @@ Usage:
   npm run cli -- ingest [--dry-run] [--root ROOT_ID]
   npm run cli -- archive audit [--root ROOT_ID] [--output MANIFEST.json]
   npm run cli -- archive plan [--root ROOT_ID] [--limit N] [--output PLAN.json]
+  npm run cli -- archive simulate --plan PLAN.json --review REVIEW.json [--output RESULT.json]
   npm run cli -- search [--limit N] [--dedupe MODE] <words>
   npm run cli -- show <SECTION_ID>
   npm run cli -- get [--relations N] <ENTITY_ID_OR_EXACT_NAME>
@@ -130,13 +132,30 @@ function outputIsInsideArchive(outputPath: string, archivePath: string): boolean
 
 function runArchiveCommand(args: string[]): void {
   const [operation = "audit", ...auditArgs] = args;
-  if (!new Set(["audit", "plan"]).has(operation)) throw new Error("archive operation must be audit or plan");
+  if (!new Set(["audit", "plan", "simulate"]).has(operation)) throw new Error("archive operation must be audit, plan, or simulate");
   const config = loadConfig();
   const { values } = parseArgs({ args: auditArgs, options: {
     root: { type: "string" },
     output: { type: "string", short: "o" },
     limit: { type: "string", short: "n" },
+    plan: { type: "string" },
+    review: { type: "string" },
   } });
+  if (operation === "simulate") {
+    if (!values.plan || !values.review) throw new Error("archive simulate requires --plan and --review");
+    const plan = JSON.parse(readFileSync(resolve(values.plan), "utf8")) as ArchiveMigrationPlan;
+    const review = JSON.parse(readFileSync(resolve(values.review), "utf8")) as unknown;
+    const simulation = simulateArchiveMigration(config, plan, review);
+    const serialized = `${JSON.stringify({ status: "ok", simulation }, null, 2)}\n`;
+    if (values.output) {
+      if (config.archiveRoots.some((root) => outputIsInsideArchive(values.output!, root.path))) {
+        throw new Error("simulation output must be outside every configured archive root");
+      }
+      writeFileSync(resolve(values.output), serialized, { encoding: "utf8", mode: 0o600 });
+      console.log(JSON.stringify({ status: "ok", readOnly: true, output: resolve(values.output), summary: simulation.summary }, null, 2));
+    } else console.log(serialized.trimEnd());
+    return;
+  }
   const roots = values.root
     ? [values.root]
     : config.archiveRoots.filter((root) => root.enabled).map((root) => root.rootId);

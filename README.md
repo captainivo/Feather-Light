@@ -30,6 +30,7 @@ npm run cli -- ingest
 npm run cli -- archive audit
 npm run cli -- archive audit --output /safe/path/story-archive-audit.json
 npm run cli -- archive plan --limit 20 --output /safe/path/migration-batch.json
+npm run cli -- archive simulate --plan /private/path/plan.json --review /private/path/review.json --output /private/path/result.json
 npm run cli -- search "Aanu"
 npm run cli -- search --limit 5 --dedupe title "Aanu-Kathara"
 npm run cli -- show sec_ab11f1ed3840bfafc4b84c59
@@ -78,6 +79,14 @@ read-only and applies the same outside-the-vault output rule.
 Legacy notes with no trustworthy creation evidence use the explicit pair `created: unknown` and
 `created_source: legacy-import`. This preserves uncertainty instead of substituting filesystem
 timestamps or migration dates.
+
+Migration reviews are separate overlays keyed by relative path, source hash, and field. Review or
+manual proposals require an explicit `approve`, `replace`, or `reject` decision with reviewer and
+timestamp provenance. The simulator applies mechanical proposals in memory, checks review and file
+hashes for staleness, validates the prospective metadata contract, and reports ready, unresolved,
+stale, or invalid outcomes. It never serializes or writes a canonical note.
+Plan, review, and simulation files may remain in a private directory outside the repository; the
+CLI refuses to place simulation output inside any configured archive root.
 
 A non-dry-run ingest automatically rebuilds the deterministic entity projection. `entities build`
 is also available when testing classification rules without rescanning the archive.

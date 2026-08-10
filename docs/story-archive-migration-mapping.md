@@ -2,6 +2,12 @@
 
 These mappings are proposals for Phase 0.5 review. They do not authorize vault writes.
 
+Review decisions live in a separate versioned overlay. Each decision identifies the plan version,
+archive root, relative path, source hash, and field, and records an action, reviewer, and timestamp.
+This prevents an approval from silently carrying across a changed source file. Dry-run simulation
+merges approved proposals only in memory and validates the prospective metadata; it performs no
+Markdown serialization and no vault writes.
+
 ## Proposal levels
 
 - `mechanical`: formatting or identity backfill that does not decide canon.
