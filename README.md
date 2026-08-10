@@ -31,6 +31,7 @@ npm run cli -- archive audit
 npm run cli -- archive audit --output /safe/path/story-archive-audit.json
 npm run cli -- archive plan --limit 20 --output /safe/path/migration-batch.json
 npm run cli -- archive review-template --plan /private/path/plan.json --output /private/path/review.json
+npm run cli -- archive review-page --review /private/path/review.json --output /private/path/review.html
 npm run cli -- archive simulate --plan /private/path/plan.json --review /private/path/review.json --output /private/path/result.json
 npm run cli -- search "Aanu"
 npm run cli -- search --limit 5 --dedupe title "Aanu-Kathara"
@@ -93,6 +94,9 @@ each review or manual proposal. Complete an entry by changing its action and add
 an offset-aware `decidedAt`; replacement decisions also require a `value`.
 Each review records a SHA-256 hash of the fully validated plan. Simulation refuses the review if any
 path, proposal, reason, source hash, or batch count changed after the template was generated.
+`review-page` creates a self-contained offline worksheet with no external scripts, fonts, analytics,
+or network access. It includes proposal metadata but never note bodies, and downloads the edited
+review as JSON for subsequent simulation.
 
 A non-dry-run ingest automatically rebuilds the deterministic entity projection. `entities build`
 is also available when testing classification rules without rescanning the archive.

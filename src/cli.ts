@@ -25,6 +25,7 @@ import { operateGrowth, operateLonging } from "./inner.js";
 import { auditArchiveRoot } from "./archive-migration-audit.js";
 import { parseArchiveMigrationPlan, planArchiveMigration, type ArchiveMigrationPlan } from "./archive-migration-plan.js";
 import { createArchiveMigrationReviewTemplate, simulateArchiveMigration } from "./archive-migration-review.js";
+import { renderArchiveMigrationReviewPage } from "./archive-migration-review-page.js";
 
 const HELP = `Feather-Light — read-only Westpole search
 
@@ -34,6 +35,7 @@ Usage:
   npm run cli -- archive audit [--root ROOT_ID] [--output MANIFEST.json]
   npm run cli -- archive plan [--root ROOT_ID] [--limit N] [--output PLAN.json]
   npm run cli -- archive review-template --plan PLAN.json [--root ROOT_ID] --output REVIEW.json
+  npm run cli -- archive review-page --review REVIEW.json --output REVIEW.html
   npm run cli -- archive simulate --plan PLAN.json --review REVIEW.json [--output RESULT.json]
   npm run cli -- search [--limit N] [--dedupe MODE] <words>
   npm run cli -- show <SECTION_ID>
@@ -145,7 +147,7 @@ function migrationPlanFromJson(value: unknown, requestedRoot?: string): ArchiveM
 
 function runArchiveCommand(args: string[]): void {
   const [operation = "audit", ...auditArgs] = args;
-  if (!new Set(["audit", "plan", "review-template", "simulate"]).has(operation)) throw new Error("archive operation must be audit, plan, review-template, or simulate");
+  if (!new Set(["audit", "plan", "review-template", "review-page", "simulate"]).has(operation)) throw new Error("archive operation must be audit, plan, review-template, review-page, or simulate");
   const config = loadConfig();
   const { values } = parseArgs({ args: auditArgs, options: {
     root: { type: "string" },
@@ -154,6 +156,14 @@ function runArchiveCommand(args: string[]): void {
     plan: { type: "string" },
     review: { type: "string" },
   } });
+  if (operation === "review-page") {
+    if (!values.review || !values.output) throw new Error("archive review-page requires --review and --output");
+    if (config.archiveRoots.some((root) => outputIsInsideArchive(values.output!, root.path))) throw new Error("review page output must be outside every configured archive root");
+    const review = JSON.parse(readFileSync(resolve(values.review), "utf8")) as unknown;
+    writeFileSync(resolve(values.output), renderArchiveMigrationReviewPage(review), { encoding: "utf8", mode: 0o600 });
+    console.log(JSON.stringify({ status: "ok", readOnly: true, offline: true, output: resolve(values.output) }, null, 2));
+    return;
+  }
   if (operation === "review-template" || operation === "simulate") {
     if (!values.plan) throw new Error(`archive ${operation} requires --plan`);
     const plan = migrationPlanFromJson(JSON.parse(readFileSync(resolve(values.plan), "utf8")) as unknown, values.root);
