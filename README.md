@@ -17,6 +17,13 @@ npm run ingest
 npm test
 ```
 
+## Container development
+
+Copy `.env.container.example` to a private, ignored `.env`, set absolute token and archive paths,
+then run `docker compose config` followed by `docker compose build`. The canonical archive is
+mounted read-only and is excluded from the image build context. See
+`docs/container-architecture.md` for the service and storage boundaries.
+
 For this workstation, `config.yaml` points to the canonical local archive at
 `/Users/captainivo/Documents/Mithra Library/The Westpole`. The file is ignored by Git so
 machine-specific paths are not published.

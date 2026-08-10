@@ -19,3 +19,17 @@ state.
 The first containerization slice should add a multi-stage image for the existing TypeScript service,
 health checks, persistent state mounts, read-only canonical archive mounts, and secret-file mounts.
 The other three modules can then be added behind explicit route and storage namespaces.
+
+## Implemented first slice
+
+The repository now includes a multi-stage Node 22 image and Compose definition for the existing
+service. The runtime runs as the unprivileged `node` user with a read-only root filesystem, all
+Linux capabilities dropped, and `no-new-privileges` enabled. SQLite state uses a named volume;
+configuration, the API token, and canonical Markdown use read-only bind mounts. Canon is mounted at
+`/archive/westpole`, and the Docker build context explicitly excludes local configuration, state,
+private archives, and migration artifacts.
+
+This slice packages only the existing Feather-Light process. It does not yet claim that Aauthora,
+River-Slate, Shard-Lantern, Granite-Wing, n8n, or Ollama run inside the same Compose unit. Their
+service definitions will be added individually with explicit ports, health dependencies, storage,
+and API boundaries rather than hidden inside this image.
