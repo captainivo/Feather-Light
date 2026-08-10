@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Config } from "../src/config.js";
 import { planArchiveMigration } from "../src/archive-migration-plan.js";
-import { simulateArchiveMigration } from "../src/archive-migration-review.js";
+import { createArchiveMigrationReviewTemplate, simulateArchiveMigration } from "../src/archive-migration-review.js";
 
 function fixture(): { config: Config; note: string } {
   const base = join(process.env.TMPDIR ?? "/tmp", `feather-review-${crypto.randomUUID()}`);
@@ -44,6 +44,15 @@ function reviewFor(plan: ReturnType<typeof planArchiveMigration>, action: "appro
 }
 
 describe("archive migration review simulation", () => {
+  it("creates an editable pending template for every non-mechanical proposal", () => {
+    const { config } = fixture();
+    const plan = planArchiveMigration(config, "test");
+    const template = createArchiveMigrationReviewTemplate(plan);
+    expect(template.decisions.length).toBeGreaterThan(0);
+    expect(template.decisions).toEqual(expect.arrayContaining([expect.objectContaining({ action: "pending", proposal: expect.objectContaining({ level: "review" }) })]));
+    expect(simulateArchiveMigration(config, plan, template).summary.unresolved).toBe(1);
+  });
+
   it("simulates approved proposals without changing the archive", () => {
     const { config, note } = fixture();
     const plan = planArchiveMigration(config, "test");

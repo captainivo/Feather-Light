@@ -11,16 +11,23 @@ const decisionSchema = z.object({
   relativePath: z.string().min(1),
   sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
   field: z.string().min(1),
-  action: z.enum(["approve", "replace", "reject"]),
+  action: z.enum(["pending", "approve", "replace", "reject"]),
   value: z.unknown().optional(),
-  reviewer: z.string().trim().min(1).max(120),
-  decidedAt: z.iso.datetime({ offset: true }),
+  reviewer: z.string().trim().min(1).max(120).optional(),
+  decidedAt: z.iso.datetime({ offset: true }).optional(),
+  proposal: z.object({ value: z.unknown(), level: z.enum(["review", "manual"]), source: z.string(), reason: z.string() }).strict().optional(),
 }).strict().superRefine((decision, context) => {
   if (decision.action === "replace" && decision.value === undefined) {
     context.addIssue({ code: "custom", path: ["value"], message: "replace decisions require a value" });
   }
   if (decision.action !== "replace" && decision.value !== undefined) {
     context.addIssue({ code: "custom", path: ["value"], message: `${decision.action} decisions cannot provide a value` });
+  }
+  if (decision.action !== "pending" && (!decision.reviewer || !decision.decidedAt)) {
+    context.addIssue({ code: "custom", path: ["reviewer"], message: "completed decisions require reviewer and decidedAt" });
+  }
+  if (decision.action === "pending" && (decision.reviewer || decision.decidedAt)) {
+    context.addIssue({ code: "custom", path: ["reviewer"], message: "pending decisions cannot have review provenance" });
   }
 });
 
@@ -60,6 +67,23 @@ function decisionValue(proposal: MigrationFieldProposal, decision: z.infer<typeo
   if (decision?.action === "approve") return proposal.value;
   if (decision?.action === "replace") return decision.value;
   return undefined;
+}
+
+export function createArchiveMigrationReviewTemplate(plan: ArchiveMigrationPlan): ArchiveMigrationReview {
+  return {
+    reviewVersion: 1,
+    planVersion: 1,
+    rootId: plan.rootId,
+    decisions: plan.files.flatMap((file) => file.proposals
+      .filter((proposal): proposal is MigrationFieldProposal & { level: "review" | "manual" } => proposal.level !== "mechanical")
+      .map((proposal) => ({
+        relativePath: file.relativePath,
+        sourceHash: file.sourceHash,
+        field: proposal.field,
+        action: "pending" as const,
+        proposal: { value: proposal.value, level: proposal.level, source: proposal.source, reason: proposal.reason },
+      }))),
+  };
 }
 
 export function parseArchiveMigrationReview(value: unknown): ArchiveMigrationReview {
@@ -115,7 +139,7 @@ export function simulateArchiveMigration(
         rejectedFields.push(proposal.field);
         continue;
       }
-      const value = decisionValue(proposal, decision);
+      const value = decisionValue(proposal, decision?.action === "pending" ? undefined : decision);
       if (value === undefined) unresolvedFields.push(proposal.field);
       else {
         prospective[proposal.field] = value;

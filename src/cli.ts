@@ -24,7 +24,7 @@ import { generateDream, operateDream } from "./dream.js";
 import { operateGrowth, operateLonging } from "./inner.js";
 import { auditArchiveRoot } from "./archive-migration-audit.js";
 import { planArchiveMigration, type ArchiveMigrationPlan } from "./archive-migration-plan.js";
-import { simulateArchiveMigration } from "./archive-migration-review.js";
+import { createArchiveMigrationReviewTemplate, simulateArchiveMigration } from "./archive-migration-review.js";
 
 const HELP = `Feather-Light — read-only Westpole search
 
@@ -33,6 +33,7 @@ Usage:
   npm run cli -- ingest [--dry-run] [--root ROOT_ID]
   npm run cli -- archive audit [--root ROOT_ID] [--output MANIFEST.json]
   npm run cli -- archive plan [--root ROOT_ID] [--limit N] [--output PLAN.json]
+  npm run cli -- archive review-template --plan PLAN.json [--root ROOT_ID] --output REVIEW.json
   npm run cli -- archive simulate --plan PLAN.json --review REVIEW.json [--output RESULT.json]
   npm run cli -- search [--limit N] [--dedupe MODE] <words>
   npm run cli -- show <SECTION_ID>
@@ -130,9 +131,21 @@ function outputIsInsideArchive(outputPath: string, archivePath: string): boolean
   return outputParent === archiveReal || outputParent.startsWith(`${archiveReal}${sep}`);
 }
 
+function migrationPlanFromJson(value: unknown, requestedRoot?: string): ArchiveMigrationPlan {
+  const candidate = value as Partial<ArchiveMigrationPlan> & { plans?: ArchiveMigrationPlan[] };
+  if (Array.isArray(candidate.plans)) {
+    const matches = requestedRoot ? candidate.plans.filter((plan) => plan.rootId === requestedRoot) : candidate.plans;
+    if (matches.length !== 1) throw new Error("plan file must contain exactly one matching plan; use --root when needed");
+    return matches[0]!;
+  }
+  if (typeof candidate.rootId !== "string" || !Array.isArray(candidate.files)) throw new Error("invalid migration plan file");
+  if (requestedRoot && candidate.rootId !== requestedRoot) throw new Error("plan root does not match --root");
+  return candidate as ArchiveMigrationPlan;
+}
+
 function runArchiveCommand(args: string[]): void {
   const [operation = "audit", ...auditArgs] = args;
-  if (!new Set(["audit", "plan", "simulate"]).has(operation)) throw new Error("archive operation must be audit, plan, or simulate");
+  if (!new Set(["audit", "plan", "review-template", "simulate"]).has(operation)) throw new Error("archive operation must be audit, plan, review-template, or simulate");
   const config = loadConfig();
   const { values } = parseArgs({ args: auditArgs, options: {
     root: { type: "string" },
@@ -141,9 +154,18 @@ function runArchiveCommand(args: string[]): void {
     plan: { type: "string" },
     review: { type: "string" },
   } });
-  if (operation === "simulate") {
-    if (!values.plan || !values.review) throw new Error("archive simulate requires --plan and --review");
-    const plan = JSON.parse(readFileSync(resolve(values.plan), "utf8")) as ArchiveMigrationPlan;
+  if (operation === "review-template" || operation === "simulate") {
+    if (!values.plan) throw new Error(`archive ${operation} requires --plan`);
+    const plan = migrationPlanFromJson(JSON.parse(readFileSync(resolve(values.plan), "utf8")) as unknown, values.root);
+    if (operation === "review-template") {
+      if (!values.output) throw new Error("archive review-template requires --output");
+      if (config.archiveRoots.some((root) => outputIsInsideArchive(values.output!, root.path))) throw new Error("review output must be outside every configured archive root");
+      const template = createArchiveMigrationReviewTemplate(plan);
+      writeFileSync(resolve(values.output), `${JSON.stringify(template, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+      console.log(JSON.stringify({ status: "ok", readOnly: true, output: resolve(values.output), pendingDecisions: template.decisions.length }, null, 2));
+      return;
+    }
+    if (!values.review) throw new Error("archive simulate requires --review");
     const review = JSON.parse(readFileSync(resolve(values.review), "utf8")) as unknown;
     const simulation = simulateArchiveMigration(config, plan, review);
     const serialized = `${JSON.stringify({ status: "ok", simulation }, null, 2)}\n`;

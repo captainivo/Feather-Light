@@ -30,6 +30,7 @@ npm run cli -- ingest
 npm run cli -- archive audit
 npm run cli -- archive audit --output /safe/path/story-archive-audit.json
 npm run cli -- archive plan --limit 20 --output /safe/path/migration-batch.json
+npm run cli -- archive review-template --plan /private/path/plan.json --output /private/path/review.json
 npm run cli -- archive simulate --plan /private/path/plan.json --review /private/path/review.json --output /private/path/result.json
 npm run cli -- search "Aanu"
 npm run cli -- search --limit 5 --dedupe title "Aanu-Kathara"
@@ -87,6 +88,9 @@ hashes for staleness, validates the prospective metadata contract, and reports r
 stale, or invalid outcomes. It never serializes or writes a canonical note.
 Plan, review, and simulation files may remain in a private directory outside the repository; the
 CLI refuses to place simulation output inside any configured archive root.
+`review-template` accepts the envelope produced by `archive plan` and creates one pending entry for
+each review or manual proposal. Complete an entry by changing its action and adding `reviewer` and
+an offset-aware `decidedAt`; replacement decisions also require a `value`.
 
 A non-dry-run ingest automatically rebuilds the deterministic entity projection. `entities build`
 is also available when testing classification rules without rescanning the archive.
