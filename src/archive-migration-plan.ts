@@ -6,6 +6,7 @@ import { sha256, stableId } from "./hash.js";
 import { safeMarkdownFiles } from "./ingest.js";
 import { parseMarkdown } from "./markdown.js";
 import { canonStatuses } from "./story-archive-contract.js";
+import { findGitRepository, gitFirstAddEvidence } from "./git-history.js";
 
 type ReviewLevel = "mechanical" | "review" | "manual";
 
@@ -78,7 +79,7 @@ function statusProposal(frontmatter: Record<string, unknown>): MigrationFieldPro
   return { field: "status", value: null, source: "manual", level: "manual", reason: "No safe canon-status mapping exists." };
 }
 
-function planFile(rootId: string, rootPath: string, absolutePath: string): ArchiveMigrationPlanFile {
+function planFile(rootId: string, rootPath: string, absolutePath: string, gitRepository: string | null): ArchiveMigrationPlanFile {
   const before = statSync(absolutePath, { bigint: true });
   const descriptor = openSync(absolutePath, "r");
   let buffer: Buffer;
@@ -120,7 +121,12 @@ function planFile(rootId: string, rootPath: string, absolutePath: string): Archi
   if (!("aliases" in metadata)) proposals.push({ field: "aliases", value: [], source: "empty-default", level: "mechanical", reason: "No legacy aliases field exists." });
   else if (typeof metadata.aliases === "string") proposals.push({ field: "aliases", value: [metadata.aliases], source: "aliases", level: "review", reason: "Legacy scalar alias was converted to a one-item array." });
   else if (!Array.isArray(metadata.aliases) || !metadata.aliases.every((item) => typeof item === "string")) proposals.push({ field: "aliases", value: null, source: "manual", level: "manual", reason: "Legacy aliases value is neither text nor a text array." });
-  if (!("created" in metadata)) proposals.push({ field: "created", value: null, source: "manual", level: "manual", reason: "Filesystem times are not trusted as canonical creation dates." });
+  if (!("created" in metadata)) {
+    const evidence = gitRepository ? gitFirstAddEvidence(gitRepository, absolutePath) : null;
+    proposals.push(evidence
+      ? { field: "created", value: evidence.createdDate, source: `git-first-add:${evidence.commit}`, level: "review", reason: `Git author timestamp ${evidence.authoredAt} is evidence, not unquestionable canon.` }
+      : { field: "created", value: null, source: "manual", level: "manual", reason: gitRepository ? "No first-add commit was found for this path." : "The archive is not in a Git repository; filesystem times are not trusted." });
+  }
   const levels = new Set(proposals.map((proposal) => proposal.level));
   return {
     relativePath,
@@ -136,9 +142,11 @@ export function planArchiveMigration(config: Config, rootId: string, batchLimit 
   if (!root) throw new Error(`unknown or disabled archive root: ${rootId}`);
   const rootPath = realpathSync(root.path);
   const discovered = safeMarkdownFiles(root.path, config.limits.maxFileBytes);
-  const files = discovered.map((path) => planFile(root.rootId, rootPath, path))
-    .sort((left, right) => left.relativePath.localeCompare(right.relativePath, "en"))
-    .slice(0, batchLimit);
+  const gitRepository = findGitRepository(rootPath);
+  const files = discovered
+    .sort((left, right) => relative(rootPath, left).localeCompare(relative(rootPath, right), "en"))
+    .slice(0, batchLimit)
+    .map((path) => planFile(root.rootId, rootPath, path, gitRepository));
   return {
     planVersion: 1,
     rootId,

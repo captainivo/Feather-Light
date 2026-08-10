@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import type { Config } from "../src/config.js";
 import { planArchiveMigration } from "../src/archive-migration-plan.js";
@@ -58,5 +59,25 @@ describe("Phase 0.5 migration batch planner", () => {
     const repeated = planArchiveMigration(config, "westpole", 1);
     expect(first).toEqual(repeated);
     expect(first).toMatchObject({ plannedFiles: 1, remainingFiles: 1 });
+  });
+
+  it("uses Git first-add history as reviewable created-date evidence", () => {
+    const { config } = fixture();
+    const root = config.archiveRoots[0]!.path;
+    const run = (args: string[], date?: string) => execFileSync("git", ["-C", root, ...args], {
+      stdio: "ignore",
+      env: { ...process.env, ...(date ? { GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date } : {}) },
+    });
+    run(["init", "-q"]);
+    run(["config", "user.email", "test@example.com"]);
+    run(["config", "user.name", "Test"]);
+    run(["add", "."]);
+    run(["commit", "-q", "-m", "initial archive"], "2021-04-05T08:00:00-07:00");
+    const plan = planArchiveMigration(config, "westpole", 1);
+    expect(plan.files[0]!.proposals).toContainEqual(expect.objectContaining({
+      field: "created",
+      value: "2021-04-05",
+      level: "review",
+    }));
   });
 });

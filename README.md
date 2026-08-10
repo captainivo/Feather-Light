@@ -71,7 +71,9 @@ output is refused if its path is inside any configured archive root.
 
 `archive plan` creates a bounded, deterministic review batch. Every proposed field is labelled
 `mechanical`, `review`, or `manual`; legacy workflow and canon statuses are never silently treated
-as equivalent. The planner is also read-only and applies the same outside-the-vault output rule.
+as equivalent. When Git history exists, the planner follows renames to the first-add commit and
+records its author date and commit hash as reviewable creation evidence. The planner is also
+read-only and applies the same outside-the-vault output rule.
 
 A non-dry-run ingest automatically rebuilds the deterministic entity projection. `entities build`
 is also available when testing classification rules without rescanning the archive.

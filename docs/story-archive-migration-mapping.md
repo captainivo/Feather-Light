@@ -30,8 +30,10 @@ These mappings are proposals for Phase 0.5 review. They do not authorize vault w
 
 ## Manual decisions
 
-- `created` remains unset. Filesystem modification and creation times are not trusted historical
-  facts. A later Git-history pass may provide evidence.
+- `created` uses the earliest Git first-add author date when a repository history exists, follows
+  renames, records the supporting commit hash, and remains review-required. Filesystem modification
+  and creation times are never trusted historical facts.
+- `created` remains unset when the archive has no Git repository or no first-add evidence.
 - Legacy `live` and `open` workflow statuses do not map to canon status.
 - Files outside recognized directory conventions need manual type/category classification.
 - Non-text or structurally invalid legacy values are not guessed.
@@ -41,3 +43,7 @@ These mappings are proposals for Phase 0.5 review. They do not authorize vault w
 The first deterministic 20-file batch was generated outside the vault. All 20 currently require at
 least one manual decision, primarily because `created` lacks trustworthy evidence. Across the batch,
 the planner produced 83 mechanical, 69 review-required, and 26 manual proposals. No files changed.
+
+The current workstation vault is not a Git repository, so all 20 first-batch creation dates remain
+manual. The resolver is ready for the future containerized canonical repository and is covered by a
+rename-history regression test.
