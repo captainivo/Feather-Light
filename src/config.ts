@@ -1,15 +1,15 @@
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 
 const localHost = z.enum(["127.0.0.1", "localhost", "::1"]);
 
 const configSchema = z.object({
-  server: z
-    .object({
+  server: z.object({
       host: localHost.default("127.0.0.1"),
       port: z.number().int().min(1).max(65_535).default(8765),
+      authTokenFile: z.string().min(1).optional(),
     })
     .default({ host: "127.0.0.1", port: 8765 }),
   database: z.object({ path: z.string().min(1).default("state/feather-light.sqlite3") }),
@@ -25,6 +25,37 @@ const configSchema = z.object({
       timeoutMs: z.number().int().min(100).max(10_000).default(2_000),
     })
     .default({ baseUrl: "http://127.0.0.1:8421", timeoutMs: 2_000 }),
+  ollama: z
+    .object({
+      baseUrl: z
+        .string()
+        .url()
+        .refine((value) => {
+          const hostname = new URL(value).hostname;
+          if (["127.0.0.1", "localhost", "::1"].includes(hostname)) return true;
+          return /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(hostname);
+        }, {
+          message: "Ollama service must be loopback-only or on a private LAN",
+        })
+        .default("http://127.0.0.1:11434"),
+      model: z.string().min(1).default("qwen3:4b-instruct"),
+      temperature: z.number().min(0).max(2).default(1.1),
+      contextWindow: z.number().int().min(512).max(8_192).default(4_096),
+      timeoutMs: z.number().int().min(1_000).max(120_000).default(60_000),
+      archiveSample: z.number().int().min(1).max(8).default(3),
+      conversationStorePath: z.string().min(1).optional(),
+      conversationSessionKey: z.string().min(1).optional(),
+      recentConversations: z.number().int().min(0).max(50).optional(),
+      openHandSample: z.number().int().min(0).max(20).optional(),
+    })
+    .default({
+      baseUrl: "http://127.0.0.1:11434",
+      model: "qwen3:4b-instruct",
+      temperature: 1.1,
+      contextWindow: 4_096,
+      timeoutMs: 60_000,
+      archiveSample: 3,
+    }),
   environment: z
     .object({
       timezone: z.string().min(1).default("America/Vancouver"),
@@ -66,9 +97,11 @@ export type Config = z.infer<typeof configSchema>;
 
 export function loadConfig(path = process.env.FEATHER_LIGHT_CONFIG ?? "config.yaml"): Config {
   const absolutePath = resolve(path);
+  const configDirectory = dirname(absolutePath);
   const raw = parseYaml(readFileSync(absolutePath, "utf8")) as unknown;
   const config = configSchema.parse(raw);
-  config.database.path = resolve(config.database.path);
-  for (const root of config.archiveRoots) root.path = resolve(root.path);
+  config.database.path = resolve(configDirectory, config.database.path);
+  if (config.server.authTokenFile) config.server.authTokenFile = resolve(configDirectory, config.server.authTokenFile);
+  for (const root of config.archiveRoots) root.path = resolve(configDirectory, root.path);
   return config;
 }

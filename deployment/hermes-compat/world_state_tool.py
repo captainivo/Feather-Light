@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import json
+import os
 from urllib.request import Request, urlopen
 
 BASE_URL = "http://127.0.0.1:8765"
 MAX_RESPONSE_BYTES = 65_536
 VALID_SCOPES = {"weather", "summary", "full"}
+TOKEN_FILE = os.path.expanduser(os.environ.get("FEATHER_LIGHT_TOKEN_FILE", "~/.config/feather-light/api-token"))
 
 SCHEMA = {
     "name": "mithra_current_state",
@@ -30,11 +32,19 @@ SCHEMA = {
 
 
 def _query(payload: dict) -> dict:
+    headers = {"Content-Type": "application/json"}
+    try:
+        with open(TOKEN_FILE, encoding="utf-8") as token_file:
+            token = token_file.read().strip()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+    except FileNotFoundError:
+        pass
     request = Request(
         BASE_URL + "/v1/query",
         data=json.dumps(payload).encode("utf-8"),
         method="POST",
-        headers={"Content-Type": "application/json"},
+        headers=headers,
     )
     with urlopen(request, timeout=5) as response:
         raw = response.read(MAX_RESPONSE_BYTES + 1)

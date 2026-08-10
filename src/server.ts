@@ -1,9 +1,12 @@
 import Fastify from "fastify";
+import { readFileSync } from "node:fs";
+import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { currentState, emotionalReflectionSchema, reflectEmotion } from "./aauthora.js";
 import { agencyActionSchema, agencyState, operateAgency } from "./agency.js";
 import { agencyEnforcementSchema, evaluateAgencyEnforcement } from "./open-hand/enforcement.js";
 import { operateRepair, repairActionSchema } from "./open-hand/repair.js";
+import { projectAgencyContext } from "./open-hand/projection.js";
 import { queryChronology } from "./chronology.js";
 import { compactAssertionResponse, compactEntityResponse, compactSearchResults, compactTimelineEvents } from "./compact.js";
 import type { Config } from "./config.js";
@@ -11,12 +14,32 @@ import type { FeatherDatabase } from "./database.js";
 import { getEntityAssertions, getEntityBrief } from "./knowledge.js";
 import { search, type DedupeMode } from "./search.js";
 import { indexStatus } from "./status.js";
+import { dreamActionSchema, generateDream, operateDream } from "./dream.js";
+import { growthActionSchema, longingActionSchema, operateGrowth, operateLonging } from "./inner.js";
 
 const responseView = z.enum(["brief", "standard"]).default("brief");
 
 export function buildServer(config: Config, database: FeatherDatabase) {
   const app = Fastify({ logger: true, bodyLimit: config.limits.responseCharacters });
-  app.get("/health", async () => ({ status: "ok", service: "feather-light", version: "0.5.0" }));
+  const apiToken = config.server.authTokenFile ? readFileSync(config.server.authTokenFile, "utf8").trim() : null;
+  if (config.server.authTokenFile && !apiToken) throw new Error("Feather-Light API token file is empty");
+  app.addHook("onRequest", async (request, reply) => {
+    if (!apiToken || request.url === "/health") return;
+    const supplied = request.headers.authorization?.startsWith("Bearer ")
+      ? request.headers.authorization.slice("Bearer ".length)
+      : "";
+    const expectedBuffer = Buffer.from(apiToken);
+    const suppliedBuffer = Buffer.from(supplied);
+    if (expectedBuffer.length !== suppliedBuffer.length || !timingSafeEqual(expectedBuffer, suppliedBuffer)) {
+      return reply.code(401).send({ status: "unauthorized" });
+    }
+  });
+  app.addHook("onSend", async (_request, reply, payload) => {
+    if (typeof payload !== "string" || payload.length <= config.limits.responseCharacters) return payload;
+    reply.code(500);
+    return JSON.stringify({ status: "response_limited", error: "response exceeded configured character limit" });
+  });
+  app.get("/health", async () => ({ status: "ok", service: "feather-light", version: "0.4.0" }));
   app.get("/v1/status", async () => indexStatus(database));
   app.post("/v1/search", async (request, reply) => {
     const parsed = z.object({
@@ -24,7 +47,7 @@ export function buildServer(config: Config, database: FeatherDatabase) {
       limit: z.number().int().min(1).optional(),
       dedupe: z.enum(["none", "file", "title", "content"]).default("file"),
       view: responseView,
-    }).safeParse(request.body);
+    }).strict().safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ status: "invalid_request", error: parsed.error.issues });
     try {
       const results = search(database, config, parsed.data.query, {
@@ -48,19 +71,19 @@ export function buildServer(config: Config, database: FeatherDatabase) {
       limit: z.number().int().min(1).max(config.limits.searchResults).default(3),
       dedupe: z.enum(["none", "file", "title", "content"]).default("file"),
       view: responseView,
-    }),
+    }).strict(),
     z.object({
       operation: z.literal("get"),
       query: z.string().min(1).max(500),
       limit: z.number().int().min(1).max(20).default(3),
       view: responseView,
-    }),
+    }).strict(),
     z.object({
       operation: z.literal("facts"),
       query: z.string().min(1).max(500),
       limit: z.number().int().min(1).max(20).default(3),
       view: responseView,
-    }),
+    }).strict(),
     z.object({
       operation: z.literal("timeline"),
       query: z.string().max(500).optional(),
@@ -68,17 +91,21 @@ export function buildServer(config: Config, database: FeatherDatabase) {
       limit: z.number().int().min(1).max(50).default(10),
       allSources: z.boolean().default(false),
       view: responseView,
-    }),
-    z.object({ operation: z.literal("status") }),
+    }).strict(),
+    z.object({ operation: z.literal("status") }).strict(),
     z.object({
       operation: z.literal("current_state"),
       recordConversation: z.boolean().default(true),
       scope: z.enum(["weather", "summary", "full"]).default("summary"),
-    }),
-    z.object({ operation: z.literal("emotional_reflection"), reflection: emotionalReflectionSchema }),
-    z.object({ operation: z.literal("agency"), agency: agencyActionSchema }),
-    z.object({ operation: z.literal("agency_enforce"), enforcement: agencyEnforcementSchema }),
-    z.object({ operation: z.literal("open_hand_repair"), repair: repairActionSchema }),
+    }).strict(),
+    z.object({ operation: z.literal("emotional_reflection"), reflection: emotionalReflectionSchema }).strict(),
+    z.object({ operation: z.literal("agency"), agency: agencyActionSchema }).strict(),
+    z.object({ operation: z.literal("agency_projection") }).strict(),
+    z.object({ operation: z.literal("agency_enforce"), enforcement: agencyEnforcementSchema }).strict(),
+    z.object({ operation: z.literal("open_hand_repair"), repair: repairActionSchema }).strict(),
+    z.object({ operation: z.literal("growth"), growth: growthActionSchema }).strict(),
+    z.object({ operation: z.literal("longing"), longing: longingActionSchema }).strict(),
+    z.object({ operation: z.literal("dream"), dream: dreamActionSchema }).strict(),
   ]);
   app.post("/v1/query", async (request, reply) => {
     const parsed = querySchema.safeParse(request.body);
@@ -108,6 +135,9 @@ export function buildServer(config: Config, database: FeatherDatabase) {
         return reply.code(400).send({ status: "invalid_request", error: error instanceof Error ? error.message : String(error) });
       }
     }
+    if (input.operation === "agency_projection") {
+      return { status: "ok", result: projectAgencyContext(database) };
+    }
     if (input.operation === "agency_enforce") {
       return { status: "ok", result: evaluateAgencyEnforcement(database, input.enforcement) };
     }
@@ -118,15 +148,47 @@ export function buildServer(config: Config, database: FeatherDatabase) {
         return reply.code(400).send({ status: "invalid_request", error: error instanceof Error ? error.message : String(error) });
       }
     }
+    if (input.operation === "growth") {
+      try {
+        return { status: "ok", result: operateGrowth(database, input.growth) };
+      } catch (error) {
+        return reply.code(400).send({ status: "invalid_request", error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    if (input.operation === "longing") {
+      try {
+        return { status: "ok", result: operateLonging(database, input.longing) };
+      } catch (error) {
+        return reply.code(400).send({ status: "invalid_request", error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    if (input.operation === "dream") {
+      try {
+        if (input.dream.action === "generate") {
+          return { status: "ok", result: await generateDream(database, config, input.dream.note) };
+        }
+        return { status: "ok", result: operateDream(database, input.dream) };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (input.dream.action === "generate") {
+          return reply.code(503).send({ status: "unavailable", error: message });
+        }
+        return reply.code(400).send({ status: "invalid_request", error: message });
+      }
+    }
     if (input.operation === "search") {
-      const results = search(database, config, input.query, {
-        limit: input.limit,
-        dedupe: input.dedupe,
-      });
-      return {
-        status: "ok",
-        results: input.view === "brief" ? compactSearchResults(results) : results,
-      };
+      try {
+        const results = search(database, config, input.query, {
+          limit: input.limit,
+          dedupe: input.dedupe,
+        });
+        return {
+          status: "ok",
+          results: input.view === "brief" ? compactSearchResults(results) : results,
+        };
+      } catch (error) {
+        return reply.code(400).send({ status: "invalid_request", error: error instanceof Error ? error.message : String(error) });
+      }
     }
     if (input.operation === "get") {
       const result = getEntityBrief(database, input.query, input.view === "brief" ? 0 : input.limit);

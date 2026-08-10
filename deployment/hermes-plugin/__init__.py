@@ -12,6 +12,19 @@ from urllib.request import Request, urlopen
 BASE_URL = os.environ.get("FEATHER_LIGHT_URL", "http://127.0.0.1:8765").rstrip("/")
 TIMEOUT_SECONDS = 5
 MAX_RESPONSE_BYTES = 65_536
+TOKEN_FILE = os.path.expanduser(os.environ.get("FEATHER_LIGHT_TOKEN_FILE", "~/.config/feather-light/api-token"))
+
+
+def _headers() -> dict[str, str]:
+    headers = {"Content-Type": "application/json"}
+    try:
+        with open(TOKEN_FILE, encoding="utf-8") as token_file:
+            token = token_file.read().strip()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+    except FileNotFoundError:
+        pass
+    return headers
 
 SCHEMA = {
     "name": "feather_light",
@@ -79,7 +92,7 @@ def _request(payload: dict[str, Any]) -> dict[str, Any]:
     request = Request(
         f"{BASE_URL}/v1/query",
         data=body,
-        headers={"Content-Type": "application/json"},
+        headers=_headers(),
         method="POST",
     )
     try:

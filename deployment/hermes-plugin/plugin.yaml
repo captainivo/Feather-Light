@@ -1,5 +1,5 @@
 name: feather-light
-version: "0.5.0"
+version: "0.4.0"
 description: "Bounded Westpole retrieval, current world state, and deliberate emotional reflection through Feather-Light."
 author: Feather-Light Project
 provides_tools:

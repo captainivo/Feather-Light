@@ -37,6 +37,7 @@ describe("deterministic entities", () => {
       server: { host: "127.0.0.1", port: 8765 },
       database: { path: join(base, "index.sqlite3") },
       aauthora: { baseUrl: "http://127.0.0.1:8421", timeoutMs: 2_000 },
+  ollama: { baseUrl: "http://127.0.0.1:11434", model: "qwen3:4b-instruct", temperature: 1.1, contextWindow: 4_096, timeoutMs: 60_000, archiveSample: 3 },
       environment: { timezone: "America/Vancouver", masterSeed: "aauthora-canonical-seed-v1", simulationStartDate: "2026-07-16", startingAbsoluteDay: 1 },
       archiveRoots: [{ rootId: "westpole", displayName: "Westpole", path: root, readOnly: true, enabled: true }],
       limits: { maxFileBytes: 1_048_576, searchResults: 10, excerptCharacters: 1_200, responseCharacters: 16_000 },
@@ -65,6 +66,14 @@ describe("deterministic entities", () => {
       classificationReason: expect.stringContaining("context-dependent"),
     }));
     expect(entityDuplicateCandidates(database)).toHaveLength(1);
+    const candidate = entityDuplicateCandidates(database)[0] as { candidateId: string; leftEntityId: string };
+    database.prepare("UPDATE entity_duplicate_candidates SET review_status='distinct' WHERE candidate_id=?").run(candidate.candidateId);
+    database.prepare("UPDATE entities SET retired=1 WHERE entity_id=?").run(candidate.leftEntityId);
+    rebuildEntities(database);
+    expect((database.prepare("SELECT review_status AS status FROM entity_duplicate_candidates WHERE candidate_id=?")
+      .get(candidate.candidateId) as { status: string }).status).toBe("distinct");
+    expect((database.prepare("SELECT retired FROM entities WHERE entity_id=?")
+      .get(candidate.leftEntityId) as { retired: number }).retired).toBe(1);
     database.close();
   });
 });

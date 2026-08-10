@@ -1,6 +1,6 @@
 name: mithra-open-hand
-version: "0.3.0"
-description: "Explicit Mithra-authored agency, deterministic action enforcement, and storage-specific repair planning through Feather-Light."
+version: "0.4.0"
+description: "Explicit Mithra-authored agency, deterministic action enforcement, and storage-specific repair planning, and compact deterministic context projection through Feather-Light."
 author: Feather-Light Project
 provides_tools:
   - mithra_agency

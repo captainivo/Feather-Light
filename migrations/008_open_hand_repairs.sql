@@ -38,6 +38,9 @@ CREATE TABLE retrieval_suppressions (
   retracted_at TEXT
 );
 
-CREATE INDEX open_hand_repairs_status_time ON open_hand_repairs(status, requested_at DESC);
-CREATE INDEX open_hand_repairs_storage_selector ON open_hand_repairs(storage_system, selector_type, selector_value);
-CREATE INDEX retrieval_suppressions_active_selector ON retrieval_suppressions(status, selector_type, selector_value);
+CREATE INDEX open_hand_repairs_status_time
+  ON open_hand_repairs(status, requested_at DESC);
+CREATE INDEX open_hand_repairs_storage_selector
+  ON open_hand_repairs(storage_system, selector_type, selector_value);
+CREATE INDEX retrieval_suppressions_active_selector
+  ON retrieval_suppressions(status, selector_type, selector_value);

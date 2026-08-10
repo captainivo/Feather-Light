@@ -86,6 +86,12 @@ The API binds to `127.0.0.1:8765` by default:
 - `GET /v1/status` reports index freshness and record counts.
 - `POST /v1/search` searches titles, headings, and section text with bounded results.
 
+Except for `/health`, API routes require `Authorization: Bearer <token>` when
+`server.authTokenFile` is configured. The VM installer creates the token with mode `0600`; Hermes
+adapters read it from `~/.config/feather-light/api-token`. Do not place the token in command-line
+arguments or logs. The current database schema is version 14 and verifies SHA-256 checksums for all
+applied migrations.
+
 ## Safety guarantees
 
 - Archive roots must be explicitly configured as read-only.

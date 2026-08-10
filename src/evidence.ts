@@ -1,4 +1,5 @@
 import type { FeatherDatabase } from "./database.js";
+import { retrievalVisibleSql } from "./open-hand/suppression.js";
 
 export interface SectionEvidence {
   sectionId: string;
@@ -23,6 +24,7 @@ export function getSection(database: FeatherDatabase, sectionId: string): Sectio
     FROM source_sections s
     JOIN source_files f ON f.source_file_id = s.source_file_id
     WHERE s.section_id = ? AND f.deleted = 0
+      AND ${retrievalVisibleSql("f", "s.section_id")}
   `).get(sectionId) as SectionEvidence | undefined) ?? null;
 }
 

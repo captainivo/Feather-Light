@@ -1,4 +1,5 @@
 import type { FeatherDatabase } from "./database.js";
+import { retrievalVisibleSql } from "./open-hand/suppression.js";
 
 export type DuplicateKind = "content" | "title";
 
@@ -20,23 +21,23 @@ export function findDuplicates(
   kind: DuplicateKind,
   limit = 25,
 ): DuplicateGroup[] {
-  const expression = kind === "content" ? "content_hash" : "lower(trim(title))";
-  const eligible = kind === "content" ? "deleted = 0 AND size_bytes > 0" : "deleted = 0";
+  const expression = kind === "content" ? "f.content_hash" : "lower(trim(f.title))";
+  const eligible = kind === "content" ? "f.deleted = 0 AND f.size_bytes > 0" : "f.deleted = 0";
   const keys = database.prepare(`
     SELECT ${expression} AS duplicate_key, count(*) AS count
-    FROM source_files
-    WHERE ${eligible}
+    FROM source_files f
+    WHERE ${eligible} AND ${retrievalVisibleSql("f")}
     GROUP BY ${expression}
     HAVING count(*) > 1
     ORDER BY count DESC, duplicate_key
     LIMIT ?
   `).all(limit) as Array<{ duplicate_key: string; count: number }>;
   const filesForKey = database.prepare(`
-    SELECT source_file_id AS sourceFileId, title, relative_path AS relativePath,
-      content_hash AS contentHash
-    FROM source_files
-    WHERE ${eligible} AND ${expression} = ?
-    ORDER BY relative_path
+    SELECT f.source_file_id AS sourceFileId, f.title, f.relative_path AS relativePath,
+      f.content_hash AS contentHash
+    FROM source_files f
+    WHERE ${eligible} AND ${retrievalVisibleSql("f")} AND ${expression} = ?
+    ORDER BY f.relative_path
   `);
   return keys.map((row) => ({
     kind,

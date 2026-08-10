@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Config } from "../src/config.js";
 import { currentState, reflectEmotion } from "../src/aauthora.js";
 import { migrate, openDatabase, type FeatherDatabase } from "../src/database.js";
-import { importLegacyEnvironment } from "../src/environment.js";
+import { importLegacyEnvironment, localDate } from "../src/environment.js";
 
 const config = {
   aauthora: { baseUrl: "http://127.0.0.1:8421", timeoutMs: 2_000 },
@@ -33,7 +33,7 @@ function responseQueue(values: object[]) {
 describe("Aauthora gateway", () => {
   it("defaults to a compact summary and records conversation activity", async () => {
     const environment = {
-      earth_date: "2026-08-02", absolute_day: 43,
+      earth_date: localDate(config.environment.timezone), absolute_day: 43,
       season: { name: "Light", phase: "early", ignored: true },
       weather: { total_day_length_hours: 30, daylight_hours: 26, temperature_current_c: 18, sky_condition: "clear", ignored: true },
       thaena: { visible: false }, estrus: { status: "unlikely" },
@@ -80,7 +80,7 @@ describe("Aauthora gateway", () => {
 
   it("returns a weather-only snapshot without fetching prior-conversation status", async () => {
     const database = databaseWithEnvironment({
-      earth_date: "2026-08-02", absolute_day: 43,
+      earth_date: localDate(config.environment.timezone), absolute_day: 43,
       season: { name: "Dark", phase: "deep" },
       weather: { total_day_length_hours: 35.5, daylight_hours: 1.1, temperature_current_c: -57.5, sky_condition: "mostly_cloudy" },
       thaena: { visible: false }, estrus: { status: "unlikely" },

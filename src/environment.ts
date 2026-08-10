@@ -92,7 +92,11 @@ export function importLegacyEnvironment(database: FeatherDatabase, value: JsonOb
     weather: object(value.weather),
     estrus: object(value.estrus),
   };
-  if (!Number.isInteger(state.absolute_day) || !/^\d{4}-\d{2}-\d{2}$/.test(state.earth_date)) {
+  const parsedDate = new Date(`${state.earth_date}T00:00:00Z`);
+  const validDate = /^\d{4}-\d{2}-\d{2}$/.test(state.earth_date)
+    && !Number.isNaN(parsedDate.getTime())
+    && parsedDate.toISOString().slice(0, 10) === state.earth_date;
+  if (!Number.isInteger(state.absolute_day) || state.absolute_day < 1 || !validDate) {
     throw new Error("legacy environment snapshot is missing its day identity");
   }
   const fingerprint = createHash("sha256").update(JSON.stringify(state)).digest("hex").slice(0, 16);
@@ -150,7 +154,7 @@ export function aauthoranClock(config: Config, state: EnvironmentState, now = ne
   };
 }
 
-export function catchUpEnvironment(database: FeatherDatabase, config: Config, through = localDate(config.environment.timezone)) {
+function catchUpEnvironmentUnlocked(database: FeatherDatabase, config: Config, through: string) {
   const initial = latestEnvironment(database);
   if (!initial) throw new Error("environment has not been initialized from the legacy snapshot");
   if (initial.earth_date >= through) return [];
@@ -179,6 +183,11 @@ export function catchUpEnvironment(database: FeatherDatabase, config: Config, th
       error instanceof Error ? error.message : String(error), run.lastInsertRowid);
     throw error;
   }
+}
+
+/** Keep the read-generate-insert sequence atomic for simultaneous catch-up callers. */
+export function catchUpEnvironment(database: FeatherDatabase, config: Config, through = localDate(config.environment.timezone)) {
+  return database.transaction(() => catchUpEnvironmentUnlocked(database, config, through))();
 }
 
 function persistEnvironment(database: FeatherDatabase, state: EnvironmentState): void {

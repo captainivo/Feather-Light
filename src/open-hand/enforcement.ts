@@ -1,11 +1,16 @@
 import { z } from "zod";
+import { posix } from "node:path";
+import { realpathSync } from "node:fs";
 import { agencyState } from "../agency.js";
 import type { FeatherDatabase } from "../database.js";
 
 export const agencyEnforcementSchema = z.object({
   tool_name: z.string().min(1).max(200),
   args: z.record(z.string(), z.union([
-    z.string().max(1_000), z.number(), z.boolean(), z.array(z.string().max(1_000)).max(20),
+    z.string().max(1_000),
+    z.number(),
+    z.boolean(),
+    z.array(z.string().max(1_000)).max(20),
   ])).default({}),
 }).strict();
 
@@ -24,6 +29,48 @@ function scalarValues(value: string | number | boolean | string[]): string[] {
   return Array.isArray(value) ? value : [String(value)];
 }
 
+function normalizedResource(value: string): string {
+  const wildcard = value.endsWith("/**");
+  const base = wildcard ? value.slice(0, -3) : value;
+  try {
+    const url = new URL(base);
+    url.pathname = posix.normalize(decodeURIComponent(url.pathname));
+    return `${url.toString()}${wildcard ? "/**" : ""}`;
+  } catch {
+    const normalized = posix.normalize(base.replaceAll("\\", "/"));
+    return `${normalized}${wildcard ? "/**" : ""}`;
+  }
+}
+
+function resourceVariants(value: string): string[] {
+  const normalized = normalizedResource(value);
+  const variants = new Set([normalized]);
+  const wildcard = normalized.endsWith("/**");
+  const base = wildcard ? normalized.slice(0, -3) : normalized;
+  try {
+    const url = new URL(base);
+    if (url.protocol === "file:") {
+      const filePath = posix.normalize(decodeURIComponent(url.pathname));
+      variants.add(`${filePath}${wildcard ? "/**" : ""}`);
+      try {
+        variants.add(`${realpathSync.native(filePath)}${wildcard ? "/**" : ""}`);
+      } catch {
+        // The lexical file path remains available when the target does not yet exist.
+      }
+    }
+  } catch {
+    // Not a URL.
+  }
+  if (base.startsWith("/")) {
+    try {
+      variants.add(`${realpathSync.native(base)}${wildcard ? "/**" : ""}`);
+    } catch {
+      // A target may not exist yet; lexical normalization still applies.
+    }
+  }
+  return [...variants];
+}
+
 export function capabilityPaths(input: AgencyEnforcementInput): string[] {
   const toolName = input.tool_name.trim();
   const paths = new Set<string>([`tool:${toolName}`]);
@@ -34,20 +81,25 @@ export function capabilityPaths(input: AgencyEnforcementInput): string[] {
       paths.add(`field:${field}=${clean}`);
       if (field === "action" || field === "operation") paths.add(`tool:${toolName}/${field}:${clean}`);
       if (CONTACT_FIELDS.has(field)) paths.add(`contact:${clean}`);
-      if (RESOURCE_FIELDS.has(field)) paths.add(`resource:${clean}`);
+      if (RESOURCE_FIELDS.has(field)) {
+        for (const resource of resourceVariants(clean)) paths.add(`resource:${resource}`);
+      }
     }
   }
   return [...paths].sort();
 }
 
-function canonicalSelector(scopeType: string, scopeValue: string): string | null {
+function canonicalSelectors(scopeType: string, scopeValue: string): string[] {
   const value = scopeValue.trim();
-  if (!value) return null;
-  if (value.includes(":")) return value;
-  if (scopeType === "tool_action") return `tool:${value}`;
-  if (scopeType === "contact") return `contact:${value}`;
-  if (scopeType === "resource") return `resource:${value}`;
-  return null;
+  if (!value) return [];
+  if (scopeType === "resource") {
+    const resource = value.startsWith("resource:") ? value.slice("resource:".length) : value;
+    return resourceVariants(resource).map((candidate) => `resource:${candidate}`);
+  }
+  if (value.includes(":")) return [value];
+  if (scopeType === "tool_action") return [`tool:${value}`];
+  if (scopeType === "contact") return [`contact:${value}`];
+  return [];
 }
 
 function selectorMatches(selector: string, candidate: string): boolean {
@@ -70,18 +122,23 @@ export function evaluateAgencyEnforcement(database: FeatherDatabase, input: Agen
     if (!BLOCKING_KINDS.has(String(directive.kind))) continue;
     const scopeType = String(directive.scope_type);
     if (!["tool_action", "contact", "resource", "disclosure", "recording"].includes(scopeType)) continue;
-    const selector = canonicalSelector(scopeType, String(directive.scope_value));
-    if (!selector) continue;
-    const matchedPath = paths.find((candidate) => selectorMatches(selector, candidate));
+    const selectors = canonicalSelectors(scopeType, String(directive.scope_value));
+    const matchedPath = paths.find((candidate) => selectors.some((selector) => selectorMatches(selector, candidate)));
     if (!matchedPath) continue;
     return {
       blocked: true,
       matched_path: matchedPath,
       directive: {
-        id: directive.id, revision: directive.revision, kind: directive.kind,
-        scope_type: directive.scope_type, scope_value: directive.scope_value,
+        id: directive.id,
+        revision: directive.revision,
+        kind: directive.kind,
+        scope_type: directive.scope_type,
+        scope_value: directive.scope_value,
       },
-      message: `Open Hand directive ${directive.id} blocks ${matchedPath}. Do not retry through an equivalent route or bargain for reversal.`,
+      message: (
+        `Open Hand directive ${directive.id} blocks ${matchedPath}. `
+        + "Do not retry through an equivalent route or bargain for reversal."
+      ),
     };
   }
   return { blocked: false, evaluated_directives: directives.length };

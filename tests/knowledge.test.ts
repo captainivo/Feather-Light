@@ -32,6 +32,7 @@ describe("deterministic knowledge projection", () => {
       server: { host: "127.0.0.1", port: 8765 },
       database: { path: join(base, "index.sqlite3") },
       aauthora: { baseUrl: "http://127.0.0.1:8421", timeoutMs: 2_000 },
+  ollama: { baseUrl: "http://127.0.0.1:11434", model: "qwen3:4b-instruct", temperature: 1.1, contextWindow: 4_096, timeoutMs: 60_000, archiveSample: 3 },
       environment: { timezone: "America/Vancouver", masterSeed: "aauthora-canonical-seed-v1", simulationStartDate: "2026-07-16", startingAbsoluteDay: 1 },
       archiveRoots: [{ rootId: "westpole", displayName: "Westpole", path: root, readOnly: true, enabled: true }],
       limits: { maxFileBytes: 1_048_576, searchResults: 10, excerptCharacters: 1_200, responseCharacters: 16_000 },

@@ -135,6 +135,14 @@ export function rebuildEntities(database: FeatherDatabase): {
       title, frontmatter_json AS frontmatterJson
     FROM source_files WHERE deleted = 0 ORDER BY relative_path
   `).all() as Array<{ sourceFileId: string; relativePath: string; title: string; frontmatterJson: string }>;
+  const priorRetired = new Set((database.prepare(
+    "SELECT entity_id FROM entities WHERE retired=1",
+  ).all() as Array<{ entity_id: string }>).map((row) => row.entity_id));
+  const priorReviews = new Map((database.prepare(
+    "SELECT candidate_id, review_status FROM entity_duplicate_candidates WHERE review_status <> 'pending'",
+  ).all() as Array<{ candidate_id: string; review_status: "distinct" | "merge" }>).map(
+    (row) => [row.candidate_id, row.review_status],
+  ));
 
   database.transaction(() => {
     database.prepare("DELETE FROM entity_duplicate_candidates").run();
@@ -173,6 +181,9 @@ export function rebuildEntities(database: FeatherDatabase): {
         classified.reviewStatus,
         classified.reason,
       );
+      if (priorRetired.has(entityId)) {
+        database.prepare("UPDATE entities SET retired=1 WHERE entity_id=?").run(entityId);
+      }
       for (const alias of aliasValues(frontmatter.aliases)) {
         const normalized = normalizeEntityLabel(alias);
         if (!normalized || normalized === normalizeEntityLabel(file.title)) continue;
@@ -207,14 +218,20 @@ export function rebuildEntities(database: FeatherDatabase): {
           const right = sorted[rightIndex]!;
           const canonicalMatch = canonicalById.get(left) === name && canonicalById.get(right) === name;
           const kind = canonicalMatch ? "canonical_label" : "alias_collision";
+          const candidateId = stableId("dup", `${left}:${right}:${kind}`);
           insertCandidate.run(
-            stableId("dup", `${left}:${right}:${kind}`),
+            candidateId,
             left,
             right,
             kind,
             canonicalMatch ? 1 : 0.85,
             canonicalMatch ? `same normalized canonical label: ${name}` : `shared canonical label or alias: ${name}`,
           );
+          const priorReview = priorReviews.get(candidateId);
+          if (priorReview) {
+            database.prepare("UPDATE entity_duplicate_candidates SET review_status=? WHERE candidate_id=?")
+              .run(priorReview, candidateId);
+          }
         }
       }
     }
@@ -260,6 +277,8 @@ export function entityDuplicateCandidates(database: FeatherDatabase, limit = 50)
     JOIN entities right_entity ON right_entity.entity_id=d.right_entity_id
     JOIN source_files right_file ON right_file.source_file_id=right_entity.source_file_id
     WHERE d.review_status='pending'
+      AND ${retrievalVisibleSql("left_file")}
+      AND ${retrievalVisibleSql("right_file")}
     ORDER BY d.score DESC, leftLabel, rightLabel LIMIT ?
   `).all(limit) as object[];
 }

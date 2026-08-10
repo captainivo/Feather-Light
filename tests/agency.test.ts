@@ -44,6 +44,15 @@ describe("agency ledger", () => {
       .toThrow("revise it explicitly");
   });
 
+  it("binds an idempotency key to one exact directive request", () => {
+    const db = database();
+    const input = { ...refusal, idempotency_key: "directive-one" };
+    expect(operateAgency(db, input)).toMatchObject({ created: true });
+    expect(operateAgency(db, input)).toMatchObject({ created: false });
+    expect(() => operateAgency(db, { ...input, scope_value: "different-topic" }))
+      .toThrow("different agency request");
+  });
+
   it("revises without rewriting history", () => {
     const db = database();
     const first = operateAgency(db, refusal) as { directive_id: string };

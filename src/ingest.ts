@@ -47,7 +47,32 @@ function replaceFile(
       | { first_seen_ingest_id: string }
       | undefined;
     if (previous) {
-      const oldSections = database.prepare("SELECT section_id FROM source_sections WHERE source_file_id = ?").all(values.sourceFileId) as { section_id: string }[];
+      const oldSections = database.prepare(`
+        SELECT section_id, heading_path, section_hash
+        FROM source_sections WHERE source_file_id = ?
+      `).all(values.sourceFileId) as Array<{ section_id: string; heading_path: string; section_hash: string }>;
+      const newByHash = new Map<string, typeof values.parsed.sections>();
+      const newByHeading = new Map<string, typeof values.parsed.sections>();
+      for (const section of values.parsed.sections) {
+        const hashMatches = newByHash.get(section.sectionHash) ?? [];
+        hashMatches.push(section);
+        newByHash.set(section.sectionHash, hashMatches);
+        const headingMatches = newByHeading.get(section.headingPath) ?? [];
+        headingMatches.push(section);
+        newByHeading.set(section.headingPath, headingMatches);
+      }
+      const remapSuppression = database.prepare(`
+        UPDATE retrieval_suppressions SET selector_value=?
+        WHERE status='active' AND selector_type='section_id' AND selector_value=?
+      `);
+      for (const oldSection of oldSections) {
+        const hashMatches = newByHash.get(oldSection.section_hash) ?? [];
+        const headingMatches = newByHeading.get(oldSection.heading_path) ?? [];
+        const replacement = hashMatches.length === 1 ? hashMatches[0] : headingMatches.length === 1 ? headingMatches[0] : undefined;
+        if (replacement && replacement.sectionId !== oldSection.section_id) {
+          remapSuppression.run(replacement.sectionId, oldSection.section_id);
+        }
+      }
       const deleteFts = database.prepare("DELETE FROM sections_fts WHERE section_id = ?");
       for (const section of oldSections) deleteFts.run(section.section_id);
       database.prepare("DELETE FROM source_sections WHERE source_file_id = ?").run(values.sourceFileId);
@@ -106,7 +131,7 @@ function replaceFile(
   })();
 }
 
-export function ingestRoot(database: FeatherDatabase, config: Config, rootId: string, dryRun = false): IngestResult {
+function ingestRootUnlocked(database: FeatherDatabase, config: Config, rootId: string, dryRun = false): IngestResult {
   const root = config.archiveRoots.find((candidate) => candidate.rootId === rootId && candidate.enabled);
   if (!root) throw new Error(`unknown or disabled archive root: ${rootId}`);
   const ingestId = newIngestId();
@@ -120,16 +145,18 @@ export function ingestRoot(database: FeatherDatabase, config: Config, rootId: st
     WHERE root.root_id = ?
   `).get(root.rootId) as { parserVersion: string | null } | undefined;
   const forceReparse = lastComplete?.parserVersion !== PARSER_VERSION;
-  database.prepare(`
-    INSERT INTO archive_roots(root_id, display_name, absolute_path, read_only, enabled, last_attempted_ingest_id)
-    VALUES (?, ?, ?, 1, 1, ?)
-    ON CONFLICT(root_id) DO UPDATE SET display_name=excluded.display_name,
-      absolute_path=excluded.absolute_path, enabled=1, last_attempted_ingest_id=excluded.last_attempted_ingest_id
-  `).run(root.rootId, root.displayName, root.path, ingestId);
-  database.prepare(`
-    INSERT INTO ingest_runs(ingest_id, root_id, started_at, status, parser_version, schema_version)
-    VALUES (?, ?, ?, 'running', ?, ?)
-  `).run(ingestId, root.rootId, startedAt, PARSER_VERSION, SCHEMA_VERSION);
+  if (!dryRun) {
+    database.prepare(`
+      INSERT INTO archive_roots(root_id, display_name, absolute_path, read_only, enabled, last_attempted_ingest_id)
+      VALUES (?, ?, ?, 1, 1, ?)
+      ON CONFLICT(root_id) DO UPDATE SET display_name=excluded.display_name,
+        absolute_path=excluded.absolute_path, enabled=1, last_attempted_ingest_id=excluded.last_attempted_ingest_id
+    `).run(root.rootId, root.displayName, root.path, ingestId);
+    database.prepare(`
+      INSERT INTO ingest_runs(ingest_id, root_id, started_at, status, parser_version, schema_version)
+      VALUES (?, ?, ?, 'running', ?, ?)
+    `).run(ingestId, root.rootId, startedAt, PARSER_VERSION, SCHEMA_VERSION);
+  }
 
   let discovered: string[] = [];
   try {
@@ -181,9 +208,16 @@ export function ingestRoot(database: FeatherDatabase, config: Config, rootId: st
     result.errors.push(error instanceof Error ? error.message : String(error));
     result.status = "failed";
   }
-  database.prepare(`
-    UPDATE ingest_runs SET finished_at=?, status=?, files_seen=?, files_opened=?,
-      bytes_read=?, records_changed=?, error_summary=? WHERE ingest_id=?
-  `).run(new Date().toISOString(), result.status, result.filesSeen, result.filesOpened, result.bytesRead, result.recordsChanged, result.errors.length ? result.errors.join("\n") : null, ingestId);
+  if (!dryRun) {
+    database.prepare(`
+      UPDATE ingest_runs SET finished_at=?, status=?, files_seen=?, files_opened=?,
+        bytes_read=?, records_changed=?, error_summary=? WHERE ingest_id=?
+    `).run(new Date().toISOString(), result.status, result.filesSeen, result.filesOpened, result.bytesRead, result.recordsChanged, result.errors.length ? result.errors.join("\n") : null, ingestId);
+  }
   return result;
+}
+
+/** Serialize a complete archive snapshot so concurrent ingests cannot invalidate each other's last-seen generation. */
+export function ingestRoot(database: FeatherDatabase, config: Config, rootId: string, dryRun = false): IngestResult {
+  return database.transaction(() => ingestRootUnlocked(database, config, rootId, dryRun))();
 }

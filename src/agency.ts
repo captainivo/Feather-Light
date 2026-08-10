@@ -82,9 +82,19 @@ function insertDirective(database: FeatherDatabase, input: Extract<AgencyAction,
     expire(database);
     if (input.idempotency_key) {
       const existing = database.prepare(
-        "SELECT id,revision FROM agency_directives WHERE idempotency_key=?",
-      ).get(input.idempotency_key) as { id: string; revision: number } | undefined;
-      if (existing) return { created: false, directive_id: existing.id, revision: existing.revision };
+        "SELECT * FROM agency_directives WHERE idempotency_key=?",
+      ).get(input.idempotency_key) as Row | undefined;
+      if (existing) {
+        const matches = String(existing.kind) === kind
+          && String(existing.scope_type) === input.scope_type
+          && String(existing.scope_value) === input.scope_value
+          && (existing.expires_at === null ? null : String(existing.expires_at)) === (input.expires_at ?? null)
+          && String(existing.source_type) === input.source_type
+          && String(existing.source_id) === input.source_id
+          && String(existing.note ?? "") === (input.note ?? "");
+        if (!matches) throw new Error("idempotency key is already bound to a different agency request");
+        return { created: false, directive_id: String(existing.id), revision: Number(existing.revision) };
+      }
     }
     const conflict = database.prepare(
       "SELECT id FROM agency_directives WHERE status='active' AND scope_type=? AND scope_value=?",

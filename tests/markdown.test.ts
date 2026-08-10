@@ -30,4 +30,33 @@ describe("parseMarkdown", () => {
       "Aanu > Core Idea",
     ]);
   });
+
+  it("keeps section identities stable when unrelated headings are inserted or reordered", () => {
+    const before = parseMarkdown("src_test", "Fallback", "# Aanu\n## Core Idea\nMeaning\n## History\nPast");
+    const after = parseMarkdown("src_test", "Fallback", "# Preface\nNew\n# Aanu\n## History\nPast\n## Core Idea\nMeaning");
+    const idsBefore = new Map(before.sections.map((section) => [section.headingPath, section.sectionId]));
+    const idsAfter = new Map(after.sections.map((section) => [section.headingPath, section.sectionId]));
+    expect(idsAfter.get("Aanu")).toBe(idsBefore.get("Aanu"));
+    expect(idsAfter.get("Aanu > Core Idea")).toBe(idsBefore.get("Aanu > Core Idea"));
+    expect(idsAfter.get("Aanu > History")).toBe(idsBefore.get("Aanu > History"));
+  });
+
+  it("indexes preamble text but ignores headings and wikilinks inside fenced code", () => {
+    const parsed = parseMarkdown("src_test", "Fallback", [
+      "A preamble links to [[Visible]].",
+      "# Aanu",
+      "```md",
+      "# False Heading",
+      "[[Ghost]]",
+      "```",
+      "## Real Heading",
+      "[[Thorin]]",
+    ].join("\n"));
+    expect(parsed.sections.map((section) => section.headingPath)).toEqual([
+      "Aanu > Preamble", "Aanu", "Aanu > Real Heading",
+    ]);
+    expect(parsed.sections.flatMap((section) => section.wikilinks).map((link) => link.target)).toEqual([
+      "Visible", "Thorin",
+    ]);
+  });
 });

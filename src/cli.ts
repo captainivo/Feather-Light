@@ -2,7 +2,7 @@ import { parseArgs } from "node:util";
 import { ensureEnvironmentCurrent } from "./aauthora.js";
 import { listChronologyPeriods, queryChronology, rebuildChronology } from "./chronology.js";
 import { loadConfig } from "./config.js";
-import { migrate, openDatabase } from "./database.js";
+import { migrate, openDatabase, SCHEMA_VERSION } from "./database.js";
 import { findDuplicates, type DuplicateKind } from "./duplicates.js";
 import {
   entityDuplicateCandidates,
@@ -18,6 +18,8 @@ import { search, type DedupeMode, type SearchResult } from "./search.js";
 import { buildServer } from "./server.js";
 import { indexStatus } from "./status.js";
 import { latestEnvironment } from "./environment.js";
+import { generateDream, operateDream } from "./dream.js";
+import { operateGrowth, operateLonging } from "./inner.js";
 
 const HELP = `Feather-Light — read-only Westpole search
 
@@ -38,6 +40,25 @@ Usage:
   npm run cli -- periods [--limit N]
   npm run cli -- environment status
   npm run cli -- environment catch-up
+  npm run cli -- growth state [--view compact|full]
+  npm run cli -- growth add --kind courage|lesson|insight|healing|connection|other --title "..." --body "..." [--tags a,b] [--source-type X] [--source-id Y]
+  npm run cli -- growth list [--kind K] [--limit N]
+  npm run cli -- growth get <ENTRY_ID>
+  npm run cli -- growth revise <ENTRY_ID> [--kind K] [--title "..."] [--body "..."] [--tags a,b] [--note "..."]
+  npm run cli -- growth retract <ENTRY_ID> [--note "..."]
+  npm run cli -- longing state [--view compact|full]
+  npm run cli -- longing add --title "..." --body "..." [--visibility private|shared] [--tags a,b] [--source-type X] [--source-id Y]
+  npm run cli -- longing list [--status held|released|retracted] [--visibility private|shared] [--limit N]
+  npm run cli -- longing get <ENTRY_ID>
+  npm run cli -- longing share <ENTRY_ID>
+  npm run cli -- longing release <ENTRY_ID> [--note "..."]
+  npm run cli -- longing retract <ENTRY_ID> [--note "..."]
+  npm run cli -- dream state
+  npm run cli -- dream list [--status unread|held|released] [--limit N]
+  npm run cli -- dream get <DREAM_ID>
+  npm run cli -- dream generate [--note "..."]
+  npm run cli -- dream read <DREAM_ID> [--hold] [--note "..."]
+  npm run cli -- dream release <DREAM_ID> [--note "..."]
   npm run cli -- serve
 
 Search deduplication modes:
@@ -69,6 +90,29 @@ function positiveInteger(value: string | undefined, fallback: number): number {
   return parsed;
 }
 
+function splitTags(value: string | undefined): string[] | undefined {
+  if (value === undefined) return undefined;
+  const tags = value.split(",").map((tag) => tag.trim()).filter((tag) => tag.length > 0);
+  if (tags.length === 0) throw new Error("tags must be a comma-separated list with at least one tag");
+  return tags;
+}
+
+function printGrowthEntry(entry: Record<string, unknown>): void {
+  console.log(`${String(entry.entry_id)} · ${String(entry.kind)} · ${String(entry.status)}`);
+  console.log(`   ${String(entry.title)}`);
+  console.log(`   ${String(entry.body)}`);
+  if (Array.isArray(entry.tags) && entry.tags.length > 0) console.log(`   tags: ${entry.tags.join(", ")}`);
+  console.log(`   ${String(entry.created_at)} · supersedes: ${entry.supersedes_id ?? "none"}`);
+}
+
+function printLongingEntry(entry: Record<string, unknown>): void {
+  console.log(`${String(entry.entry_id)} · ${String(entry.visibility)} · ${String(entry.status)}`);
+  console.log(`   ${String(entry.title)}`);
+  console.log(`   ${String(entry.body)}`);
+  if (Array.isArray(entry.tags) && entry.tags.length > 0) console.log(`   tags: ${entry.tags.join(", ")}`);
+  console.log(`   ${String(entry.created_at)}`);
+}
+
 async function main(): Promise<void> {
   const [command = "help", ...rest] = process.argv.slice(2);
   if (["help", "--help", "-h"].includes(command)) {
@@ -82,7 +126,7 @@ async function main(): Promise<void> {
   let closeDatabase = true;
   try {
     if (command === "migrate") {
-      console.log(JSON.stringify({ status: "ok", schemaVersion: 7 }));
+      console.log(JSON.stringify({ status: "ok", schemaVersion: SCHEMA_VERSION }));
     } else if (command === "status") {
       const { values } = parseArgs({ args: rest, options: { json: { type: "boolean", default: false } } });
       const status = indexStatus(database) as {
@@ -345,6 +389,208 @@ async function main(): Promise<void> {
         console.log(JSON.stringify({ status: "ok", generated: result.generated.length, current: result.current }, null, 2));
       } else {
         throw new Error("environment operation must be status or catch-up");
+      }
+    } else if (command === "growth") {
+      const [operation = "state", ...growthArgs] = rest;
+      if (operation === "state") {
+        const { values } = parseArgs({ args: growthArgs, options: { view: { type: "string", default: "compact" } } });
+        if (!new Set(["compact", "full"]).has(values.view)) throw new Error("view must be compact or full");
+        const result = operateGrowth(database, { action: "state", view: values.view as "compact" | "full" });
+        console.log(JSON.stringify({ status: "ok", result }, null, 2));
+      } else if (operation === "add") {
+        const { values } = parseArgs({ args: growthArgs, options: {
+          kind: { type: "string", required: true },
+          title: { type: "string", required: true },
+          body: { type: "string", required: true },
+          tags: { type: "string" },
+          "source-type": { type: "string", default: "cli" },
+          "source-id": { type: "string", default: "growth-add" },
+          "idempotency-key": { type: "string" },
+        } });
+        const result = operateGrowth(database, {
+          action: "add",
+          kind: values.kind as "courage" | "lesson" | "insight" | "healing" | "connection" | "other",
+          title: values.title!,
+          body: values.body!,
+          ...(splitTags(values.tags) ? { tags: splitTags(values.tags)! } : {}),
+          source_type: values["source-type"],
+          source_id: values["source-id"],
+          ...(values["idempotency-key"] ? { idempotency_key: values["idempotency-key"] } : {}),
+        });
+        console.log(JSON.stringify({ status: "ok", result }, null, 2));
+      } else if (operation === "list") {
+        const { values } = parseArgs({ args: growthArgs, options: { kind: { type: "string" }, limit: { type: "string", short: "n" } } });
+        const result = operateGrowth(database, {
+          action: "list",
+          ...(values.kind ? { kind: values.kind as "courage" | "lesson" | "insight" | "healing" | "connection" | "other" } : {}),
+          limit: positiveInteger(values.limit, 25),
+        }) as { status: string; entries: Array<Record<string, unknown>> };
+        if (result.entries.length === 0) console.log("No growth entries.");
+        else for (const entry of result.entries) {
+          console.log();
+          printGrowthEntry(entry);
+        }
+      } else if (operation === "get" || operation === "revise" || operation === "retract") {
+        const { values, positionals } = parseArgs({ args: growthArgs, allowPositionals: true, options: {
+          kind: { type: "string" },
+          title: { type: "string" },
+          body: { type: "string" },
+          tags: { type: "string" },
+          note: { type: "string" },
+        } });
+        const entryId = positionals[0] ?? "";
+        if (!entryId) throw new Error(`${operation} requires an ENTRY_ID`);
+        if (operation === "get") {
+          const result = operateGrowth(database, { action: "get", entry_id: entryId }) as { status: string; entry?: Record<string, unknown> };
+          if (result.status === "not_found") console.log(`No growth entry '${entryId}'.`);
+          else {
+            console.log();
+            printGrowthEntry(result.entry!);
+          }
+        } else if (operation === "revise") {
+          const result = operateGrowth(database, {
+            action: "revise",
+            entry_id: entryId,
+            ...(values.kind ? { kind: values.kind as "courage" | "lesson" | "insight" | "healing" | "connection" | "other" } : {}),
+            ...(values.title ? { title: values.title } : {}),
+            ...(values.body ? { body: values.body } : {}),
+            ...(splitTags(values.tags) ? { tags: splitTags(values.tags)! } : {}),
+            ...(values.note ? { note: values.note } : {}),
+          });
+          console.log(JSON.stringify({ status: "ok", result }, null, 2));
+        } else {
+          const result = operateGrowth(database, {
+            action: "retract",
+            entry_id: entryId,
+            ...(values.note ? { note: values.note } : {}),
+          });
+          console.log(JSON.stringify({ status: "ok", result }, null, 2));
+        }
+      } else {
+        throw new Error("growth operation must be state, add, list, get, revise, or retract");
+      }
+    } else if (command === "longing") {
+      const [operation = "state", ...longingArgs] = rest;
+      if (operation === "state") {
+        const { values } = parseArgs({ args: longingArgs, options: { view: { type: "string", default: "compact" } } });
+        if (!new Set(["compact", "full"]).has(values.view)) throw new Error("view must be compact or full");
+        const result = operateLonging(database, { action: "state", view: values.view as "compact" | "full" });
+        console.log(JSON.stringify({ status: "ok", result }, null, 2));
+      } else if (operation === "add") {
+        const { values } = parseArgs({ args: longingArgs, options: {
+          title: { type: "string", required: true },
+          body: { type: "string", required: true },
+          visibility: { type: "string", default: "private" },
+          tags: { type: "string" },
+          "source-type": { type: "string", default: "cli" },
+          "source-id": { type: "string", default: "longing-add" },
+          "idempotency-key": { type: "string" },
+        } });
+        if (!new Set(["private", "shared"]).has(values.visibility)) throw new Error("visibility must be private or shared");
+        const result = operateLonging(database, {
+          action: "add",
+          title: values.title!,
+          body: values.body!,
+          visibility: values.visibility as "private" | "shared",
+          ...(splitTags(values.tags) ? { tags: splitTags(values.tags)! } : {}),
+          source_type: values["source-type"],
+          source_id: values["source-id"],
+          ...(values["idempotency-key"] ? { idempotency_key: values["idempotency-key"] } : {}),
+        });
+        console.log(JSON.stringify({ status: "ok", result }, null, 2));
+      } else if (operation === "list") {
+        const { values } = parseArgs({ args: longingArgs, options: {
+          status: { type: "string" },
+          visibility: { type: "string" },
+          limit: { type: "string", short: "n" },
+        } });
+        const result = operateLonging(database, {
+          action: "list",
+          ...(values.status ? { status: values.status as "held" | "released" | "retracted" } : {}),
+          ...(values.visibility ? { visibility: values.visibility as "private" | "shared" } : {}),
+          limit: positiveInteger(values.limit, 25),
+        }) as { status: string; entries: Array<Record<string, unknown>> };
+        if (result.entries.length === 0) console.log("No longing entries.");
+        else for (const entry of result.entries) {
+          console.log();
+          printLongingEntry(entry);
+        }
+      } else if (operation === "get" || operation === "share" || operation === "release" || operation === "retract") {
+        const { values, positionals } = parseArgs({ args: longingArgs, allowPositionals: true, options: { note: { type: "string" } } });
+        const entryId = positionals[0] ?? "";
+        if (!entryId) throw new Error(`${operation} requires an ENTRY_ID`);
+        if (operation === "get") {
+          const result = operateLonging(database, { action: "get", entry_id: entryId }) as { status: string; entry?: Record<string, unknown> };
+          if (result.status === "not_found") console.log(`No longing entry '${entryId}'.`);
+          else {
+            console.log();
+            printLongingEntry(result.entry!);
+          }
+        } else if (operation === "share") {
+          const result = operateLonging(database, { action: "share", entry_id: entryId });
+          console.log(JSON.stringify({ status: "ok", result }, null, 2));
+        } else if (operation === "release") {
+          const result = operateLonging(database, {
+            action: "release",
+            entry_id: entryId,
+            ...(values.note ? { note: values.note } : {}),
+          });
+          console.log(JSON.stringify({ status: "ok", result }, null, 2));
+        } else {
+          const result = operateLonging(database, {
+            action: "retract",
+            entry_id: entryId,
+            ...(values.note ? { note: values.note } : {}),
+          });
+          console.log(JSON.stringify({ status: "ok", result }, null, 2));
+        }
+      } else {
+        throw new Error("longing operation must be state, add, list, get, share, release, or retract");
+      }
+    } else if (command === "dream") {
+      const [operation = "state", ...dreamArgs] = rest;
+      if (operation === "state") {
+        const result = operateDream(database, { action: "state" });
+        console.log(JSON.stringify({ status: "ok", result }, null, 2));
+      } else if (operation === "list") {
+        const { values } = parseArgs({ args: dreamArgs, options: {
+          status: { type: "string" },
+          limit: { type: "string", short: "n" },
+        } });
+        const result = operateDream(database, {
+          action: "list",
+          ...(values.status ? { status: values.status as "unread" | "held" | "released" } : {}),
+          limit: positiveInteger(values.limit, 10),
+        }) as { status: string; dreams: Array<Record<string, unknown>> };
+        if (result.dreams.length === 0) console.log("No dreams.");
+        else for (const dream of result.dreams) {
+          console.log(`\n${String(dream.dream_id)} · ${String(dream.status)} · ${String(dream.created_at)}`);
+          console.log(`   ${String(dream.body)}`);
+        }
+      } else if (operation === "get") {
+        const { positionals } = parseArgs({ args: dreamArgs, allowPositionals: true, options: {} });
+        const dreamId = positionals[0] ?? "";
+        if (!dreamId) throw new Error("get requires a DREAM_ID");
+        const result = operateDream(database, { action: "get", dream_id: dreamId }) as { status: string; dream?: Record<string, unknown> };
+        if (result.status === "not_found") console.log(`No dream '${dreamId}'.`);
+        else console.log(JSON.stringify({ status: "ok", dream: result.dream }, null, 2));
+      } else if (operation === "generate") {
+        const { values } = parseArgs({ args: dreamArgs, options: { note: { type: "string" } } });
+        const result = await generateDream(database, config, values.note);
+        console.log(JSON.stringify({ status: "ok", dream: result.dream }, null, 2));
+      } else if (operation === "read" || operation === "release") {
+        const { values, positionals } = parseArgs({ args: dreamArgs, allowPositionals: true, options: {
+          hold: { type: "boolean", default: false },
+          note: { type: "string" },
+        } });
+        const dreamId = positionals[0] ?? "";
+        if (!dreamId) throw new Error(`${operation} requires a DREAM_ID`);
+        const result = operation === "read"
+          ? operateDream(database, { action: "read", dream_id: dreamId, hold: values.hold, ...(values.note ? { note: values.note } : {}) })
+          : operateDream(database, { action: "release", dream_id: dreamId, ...(values.note ? { note: values.note } : {}) });
+        console.log(JSON.stringify({ status: "ok", result }, null, 2));
+      } else {
+        throw new Error("dream operation must be state, list, get, generate, read, or release");
       }
     } else if (command === "serve") {
       const app = buildServer(config, database);

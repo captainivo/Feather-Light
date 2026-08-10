@@ -1,6 +1,7 @@
 server:
   host: "127.0.0.1"
   port: 8765
+  authTokenFile: "/home/mithra/.config/feather-light/api-token"
 
 database:
   path: "/home/mithra/.hermes/mithra/feather-light/state/feather-light.sqlite3"

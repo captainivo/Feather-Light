@@ -25,6 +25,7 @@ function fixture(): { config: Config; note: string } {
       server: { host: "127.0.0.1", port: 8765 },
       database: { path: join(base, "index.sqlite3") },
       aauthora: { baseUrl: "http://127.0.0.1:8421", timeoutMs: 2_000 },
+  ollama: { baseUrl: "http://127.0.0.1:11434", model: "qwen3:4b-instruct", temperature: 1.1, contextWindow: 4_096, timeoutMs: 60_000, archiveSample: 3 },
       environment: { timezone: "America/Vancouver", masterSeed: "aauthora-canonical-seed-v1", simulationStartDate: "2026-07-16", startingAbsoluteDay: 1 },
       archiveRoots: [{ rootId: "westpole", displayName: "Westpole", path: root, readOnly: true, enabled: true }],
       limits: { maxFileBytes: 1_048_576, searchResults: 10, excerptCharacters: 1200, responseCharacters: 16_000 },
@@ -48,6 +49,19 @@ describe("ingestion", () => {
     });
     expect(readFileSync(note)).toEqual(before.bytes);
     expect(statSync(note, { bigint: true }).mtimeNs).toBe(before.mtime);
+    database.close();
+  });
+
+  it("performs a dry run without mutating any database table", () => {
+    const { config } = fixture();
+    const database = openDatabase(config.database.path);
+    migrate(database);
+    expect(ingestRoot(database, config, "westpole", true)).toMatchObject({
+      status: "complete", dryRun: true, recordsChanged: 1,
+    });
+    expect((database.prepare("SELECT count(*) AS count FROM ingest_runs").get() as { count: number }).count).toBe(0);
+    expect((database.prepare("SELECT count(*) AS count FROM archive_roots").get() as { count: number }).count).toBe(0);
+    expect((database.prepare("SELECT count(*) AS count FROM source_files").get() as { count: number }).count).toBe(0);
     database.close();
   });
 
