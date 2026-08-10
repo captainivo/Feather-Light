@@ -80,3 +80,14 @@ trusted client facts.
 the other `/v1` routes. A successful response has `status: "valid"` and `persisted: false`.
 Validation never claims that a transaction was queued, that canon was written, or that a Git commit
 was created. Raw content is not echoed in the response; only its character count is returned.
+
+## Durable intake endpoint
+
+`POST /v1/archive/submissions` validates and stores the complete normalized request in the
+development ledger. A new request returns HTTP 202 with `persisted: true`, a generated transaction
+ID, and `transaction_status: "pending"`. It still does not write canon or create a Git commit.
+
+`submission_id` is the idempotency key. Replaying the same normalized request returns HTTP 200 and
+the original transaction with `replayed: true`. Reusing that ID with a different request returns
+HTTP 409 with `status: "idempotency_conflict"`. Metadata object key order does not affect request
+identity.

@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 describe("versioned n8n workflows", () => {
-  it("keeps Story Archive validation inactive and free of committed secrets", () => {
-    const raw = readFileSync("n8n/story-archive-validate.json", "utf8");
+  it("keeps Story Archive intake inactive and free of committed secrets", () => {
+    const raw = readFileSync("n8n/story-archive-intake.json", "utf8");
     const workflow = JSON.parse(raw) as {
       active: boolean;
       nodes: Array<{ name: string; parameters: Record<string, unknown> }>;
@@ -11,8 +11,8 @@ describe("versioned n8n workflows", () => {
     expect(workflow.active).toBe(false);
     expect(workflow.nodes.map((node) => node.name)).toEqual([
       "Receive Submission",
-      "Validate With Feather-Light",
-      "Return Validation Result",
+      "Persist With Feather-Light",
+      "Return Intake Result",
     ]);
     expect(raw).toContain("FEATHER_LIGHT_BASE_URL");
     expect(raw).toContain("FEATHER_LIGHT_API_TOKEN");

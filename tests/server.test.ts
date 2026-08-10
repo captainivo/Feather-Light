@@ -62,7 +62,7 @@ describe("API", () => {
 
     const status = await app.inject({ method: "GET", url: "/v1/status" });
     expect(status.statusCode).toBe(200);
-    expect(status.json()).toMatchObject({ status: "not_indexed", schemaVersion: 14 });
+    expect(status.json()).toMatchObject({ status: "not_indexed", schemaVersion: 15 });
 
     const toolStatus = await app.inject({
       method: "POST",
@@ -70,7 +70,7 @@ describe("API", () => {
       payload: { operation: "status" },
     });
     expect(toolStatus.statusCode).toBe(200);
-    expect(toolStatus.json()).toMatchObject({ status: "not_indexed", schemaVersion: 14 });
+    expect(toolStatus.json()).toMatchObject({ status: "not_indexed", schemaVersion: 15 });
 
     const invalid = await app.inject({
       method: "POST",
@@ -182,5 +182,50 @@ describe("API", () => {
     });
     expect(response.statusCode).toBe(401);
     unlinkSync(tokenPath);
+  });
+
+  it("persists archive submissions idempotently and rejects conflicting replays", async () => {
+    const database = openDatabase(":memory:");
+    migrate(database);
+    const app = buildServer(config, database);
+    resources.push(app);
+    const payload = {
+      submission_id: "SUB-2026-08-10-API-001",
+      mode: "archive",
+      source_client: "n8n",
+      submitted_at: "2026-08-10T04:00:00Z",
+      content: "A durable source submission.",
+      requested_status: "draft",
+    };
+    const first = await app.inject({ method: "POST", url: "/v1/archive/submissions", payload });
+    expect(first.statusCode).toBe(202);
+    expect(first.json()).toMatchObject({
+      status: "accepted",
+      persisted: true,
+      replayed: false,
+      submission_id: payload.submission_id,
+      transaction_status: "pending",
+    });
+
+    const replay = await app.inject({ method: "POST", url: "/v1/archive/submissions", payload });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toMatchObject({
+      status: "accepted",
+      persisted: true,
+      replayed: true,
+      transaction_id: first.json().transaction_id as string,
+    });
+
+    const conflict = await app.inject({
+      method: "POST",
+      url: "/v1/archive/submissions",
+      payload: { ...payload, content: "Conflicting source material." },
+    });
+    expect(conflict.statusCode).toBe(409);
+    expect(conflict.json()).toMatchObject({
+      status: "idempotency_conflict",
+      transaction_id: first.json().transaction_id as string,
+    });
+    expect((database.prepare("SELECT count(*) AS count FROM archive_transactions").get() as { count: number }).count).toBe(1);
   });
 });

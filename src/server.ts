@@ -17,6 +17,7 @@ import { indexStatus } from "./status.js";
 import { dreamActionSchema, generateDream, operateDream } from "./dream.js";
 import { growthActionSchema, longingActionSchema, operateGrowth, operateLonging } from "./inner.js";
 import { archiveSubmissionSchema } from "./story-archive-contract.js";
+import { recordArchiveSubmission } from "./archive-transactions.js";
 
 const responseView = z.enum(["brief", "standard"]).default("brief");
 
@@ -67,6 +68,28 @@ export function buildServer(config: Config, database: FeatherDatabase) {
         content_characters: submission.content.length,
       },
     };
+  });
+  app.post("/v1/archive/submissions", async (request, reply) => {
+    const parsed = archiveSubmissionSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ status: "invalid_request", error: parsed.error.issues });
+    }
+    const result = recordArchiveSubmission(database, parsed.data);
+    if (result.outcome === "conflict") {
+      return reply.code(409).send({
+        status: "idempotency_conflict",
+        submission_id: parsed.data.submission_id,
+        transaction_id: result.transaction.transactionId,
+      });
+    }
+    return reply.code(result.outcome === "created" ? 202 : 200).send({
+      status: "accepted",
+      persisted: true,
+      replayed: result.outcome === "replayed",
+      submission_id: result.transaction.submissionId,
+      transaction_id: result.transaction.transactionId,
+      transaction_status: result.transaction.status,
+    });
   });
   app.post("/v1/search", async (request, reply) => {
     const parsed = z.object({

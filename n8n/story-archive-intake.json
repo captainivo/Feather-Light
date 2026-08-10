@@ -1,10 +1,10 @@
 {
-  "name": "Story Archive - Validate Submission",
+  "name": "Story Archive - Intake Submission",
   "nodes": [
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "story-archive/validate",
+        "path": "story-archive/intake",
         "responseMode": "responseNode",
         "options": {}
       },
@@ -18,7 +18,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.FEATHER_LIGHT_BASE_URL + '/v1/archive/validate' }}",
+        "url": "={{ $env.FEATHER_LIGHT_BASE_URL + '/v1/archive/submissions' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -38,7 +38,7 @@
         "options": {}
       },
       "id": "3c691707-d42e-4f76-ab8e-a921306a04ea",
-      "name": "Validate With Feather-Light",
+      "name": "Persist With Feather-Light",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [-140, 0]
@@ -50,7 +50,7 @@
         "options": {}
       },
       "id": "66c0c25d-bb69-434f-a260-44ee5812a28c",
-      "name": "Return Validation Result",
+      "name": "Return Intake Result",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.4,
       "position": [140, 0]
@@ -59,10 +59,10 @@
   "pinData": {},
   "connections": {
     "Receive Submission": {
-      "main": [[{"node": "Validate With Feather-Light", "type": "main", "index": 0}]]
+      "main": [[{"node": "Persist With Feather-Light", "type": "main", "index": 0}]]
     },
-    "Validate With Feather-Light": {
-      "main": [[{"node": "Return Validation Result", "type": "main", "index": 0}]]
+    "Persist With Feather-Light": {
+      "main": [[{"node": "Return Intake Result", "type": "main", "index": 0}]]
     }
   },
   "active": false,
