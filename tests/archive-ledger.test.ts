@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { archiveDevelopmentReport, recordArchiveNoteEvent } from "../src/archive-ledger.js";
+import { archiveDevelopmentReport, recordArchiveNoteChange, recordArchiveNoteEvent } from "../src/archive-ledger.js";
 import { migrate, openDatabase, type FeatherDatabase } from "../src/database.js";
 import { parseArchiveSubmission } from "../src/story-archive-contract.js";
-import { recordArchiveSubmission } from "../src/archive-transactions.js";
+import { recordArchiveSubmission, transitionArchiveTransaction } from "../src/archive-transactions.js";
 
 const databases: FeatherDatabase[] = [];
 afterEach(() => { for (const database of databases.splice(0)) database.close(); });
@@ -12,7 +12,9 @@ function fixture(): { database: FeatherDatabase; transactionId: string } {
   migrate(database);
   databases.push(database);
   const submission = parseArchiveSubmission({ submission_id: "SUB-ledger-001", mode: "archive", source_client: "web-ui", submitted_at: "2026-08-05T12:00:00Z", content: "Synthetic source", requested_status: "draft", categories: ["character"] });
-  return { database, transactionId: recordArchiveSubmission(database, submission).transaction.transactionId };
+  const transactionId = recordArchiveSubmission(database, submission).transaction.transactionId;
+  transitionArchiveTransaction(database, transactionId, { status: "processing", occurredAt: "2026-08-05T12:01:00Z" });
+  return { database, transactionId };
 }
 
 function event(transactionId: string) {
@@ -47,5 +49,27 @@ describe("archive development ledger", () => {
     const { database, transactionId } = fixture();
     expect(() => recordArchiveNoteEvent(database, { ...event(transactionId), wordsAdded: 119 })).toThrow("gross word changes must reconcile");
     expect((database.prepare("SELECT count(*) AS count FROM archive_note_events").get() as { count: number }).count).toBe(0);
+  });
+
+  it("computes note metrics from transient content and stores no note bodies", () => {
+    const { database, transactionId } = fixture();
+    const result = recordArchiveNoteChange(database, transactionId, {
+      eventId: "ANE-diff-001", noteId: "person-example-001", filePath: "Characters/Example.md", title: "Example",
+      type: "person", status: "draft", occurredAt: "2026-08-05T12:05:00Z",
+      beforeContent: "Example stood.\n", afterContent: "[[Example]] stood beside the tower.\n",
+      actor: "n8n", primaryCategory: "character",
+    });
+    expect(result.diff).toMatchObject({ wordsAdded: 3, wordsRemoved: 0, linksAdded: 1, suggestedAction: "EXPAND" });
+    const row = database.prepare("SELECT words_added, links_added, metadata FROM archive_note_events WHERE event_id=?").get(result.eventId) as { words_added: number; links_added: number; metadata: string };
+    expect(row).toMatchObject({ words_added: 3, links_added: 1 });
+    expect(row.metadata).not.toContain("stood beside");
+  });
+
+  it("replays identical event IDs but rejects conflicting reuse", () => {
+    const { database, transactionId } = fixture();
+    expect(recordArchiveNoteEvent(database, event(transactionId), "ANE-retry")).toBe("ANE-retry");
+    expect(recordArchiveNoteEvent(database, event(transactionId), "ANE-retry")).toBe("ANE-retry");
+    expect(() => recordArchiveNoteEvent(database, { ...event(transactionId), title: "Changed" }, "ANE-retry")).toThrow("event ID conflict");
+    expect((database.prepare("SELECT count(*) AS count FROM archive_note_events").get() as { count: number }).count).toBe(1);
   });
 });

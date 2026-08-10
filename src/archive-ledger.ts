@@ -1,6 +1,7 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { FeatherDatabase } from "./database.js";
+import { computeArchiveContentDiff, type ArchiveContentDiff } from "./archive-diff.js";
 
 const label = z.string().trim().min(1).max(120);
 export const archiveNoteEventSchema = z.object({
@@ -37,9 +38,16 @@ export type ArchiveNoteEventInput = z.infer<typeof archiveNoteEventSchema>;
 
 export function recordArchiveNoteEvent(database: FeatherDatabase, value: unknown, eventId = `ANE-${randomUUID()}`): string {
   const event = archiveNoteEventSchema.parse(value);
+  const eventHash = createHash("sha256").update(JSON.stringify(event)).digest("hex");
+  const existing = database.prepare("SELECT event_hash FROM archive_note_events WHERE event_id = ?").get(eventId) as { event_hash: string } | undefined;
+  if (existing) {
+    if (existing.event_hash === eventHash) return eventId;
+    throw new Error(`archive event ID conflict: ${eventId}`);
+  }
   const write = database.transaction(() => {
-    const transaction = database.prepare("SELECT submitted_at FROM archive_transactions WHERE transaction_id = ?").get(event.transactionId) as { submitted_at: string } | undefined;
+    const transaction = database.prepare("SELECT status FROM archive_transactions WHERE transaction_id = ?").get(event.transactionId) as { status: string } | undefined;
     if (!transaction) throw new Error(`unknown archive transaction: ${event.transactionId}`);
+    if (transaction.status !== "processing") throw new Error(`archive transaction must be processing to record events: ${transaction.status}`);
     database.prepare(`
       INSERT INTO archive_notes(note_id, file_path, title, type, status, created_at, last_edited_at, word_count, content_hash, git_last_commit)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -52,13 +60,13 @@ export function recordArchiveNoteEvent(database: FeatherDatabase, value: unknown
       INSERT INTO archive_note_events(
         event_id, note_id, transaction_id, occurred_at, action, title_at_time,
         words_before, words_after, words_added, words_removed, net_words,
-        links_added, links_removed, source_hash, git_commit, actor, metadata
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        links_added, links_removed, source_hash, git_commit, actor, metadata, event_hash
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       eventId, event.noteId, event.transactionId, event.occurredAt, event.action, event.title,
       event.wordsBefore, event.wordsAfter, event.wordsAdded, event.wordsRemoved,
       event.wordsAdded - event.wordsRemoved, event.linksAdded, event.linksRemoved,
-      event.sourceHash, event.gitCommit, event.actor, JSON.stringify(event.metadata),
+      event.sourceHash, event.gitCommit, event.actor, JSON.stringify(event.metadata), eventHash,
     );
     const insertCategory = database.prepare("INSERT OR IGNORE INTO archive_categories(name) VALUES (?)");
     const categoryId = database.prepare("SELECT category_id FROM archive_categories WHERE name = ?");
@@ -71,6 +79,35 @@ export function recordArchiveNoteEvent(database: FeatherDatabase, value: unknown
   });
   write();
   return eventId;
+}
+
+export const archiveNoteChangeSchema = z.object({
+  eventId: z.string().trim().min(1).max(120),
+  noteId: z.string().min(1), filePath: z.string().min(1), title: z.string().trim().min(1).max(200),
+  type: label, status: label, occurredAt: z.iso.datetime({ offset: true }),
+  action: z.enum(["NEW", "EXPAND", "REVISE", "RETCON", "REORGANIZE", "LINK"]).optional(),
+  beforeContent: z.string().max(2_000_000), afterContent: z.string().max(2_000_000),
+  gitCommit: z.string().min(1).nullable().default(null), actor: label, primaryCategory: label,
+  secondaryCategories: z.array(label).default([]), metadata: z.record(z.string(), z.unknown()).default({}),
+}).strict();
+
+export interface RecordArchiveNoteChangeResult { eventId: string; diff: ArchiveContentDiff; }
+
+export function recordArchiveNoteChange(database: FeatherDatabase, transactionId: string, value: unknown): RecordArchiveNoteChangeResult {
+  const change = archiveNoteChangeSchema.parse(value);
+  const diff = computeArchiveContentDiff(change.beforeContent, change.afterContent);
+  const action = change.action ?? diff.suggestedAction;
+  if (!action) throw new Error("an explicit action is required when body content is unchanged");
+  recordArchiveNoteEvent(database, {
+    transactionId, noteId: change.noteId, filePath: change.filePath, title: change.title,
+    type: change.type, status: change.status, occurredAt: change.occurredAt, action,
+    wordsBefore: diff.wordsBefore, wordsAfter: diff.wordsAfter, wordsAdded: diff.wordsAdded,
+    wordsRemoved: diff.wordsRemoved, linksAdded: diff.linksAdded, linksRemoved: diff.linksRemoved,
+    sourceHash: diff.targetHash, gitCommit: change.gitCommit, actor: change.actor,
+    primaryCategory: change.primaryCategory, secondaryCategories: change.secondaryCategories,
+    metadata: { ...change.metadata, source_hash_before: diff.sourceHash, body_hash_before: diff.bodyHashBefore, body_hash_after: diff.bodyHashAfter },
+  }, change.eventId);
+  return { eventId: change.eventId, diff };
 }
 
 export interface ArchiveDevelopmentReport {

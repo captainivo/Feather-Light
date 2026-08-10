@@ -62,7 +62,7 @@ describe("API", () => {
 
     const status = await app.inject({ method: "GET", url: "/v1/status" });
     expect(status.statusCode).toBe(200);
-    expect(status.json()).toMatchObject({ status: "not_indexed", schemaVersion: 16 });
+    expect(status.json()).toMatchObject({ status: "not_indexed", schemaVersion: 17 });
 
     const toolStatus = await app.inject({
       method: "POST",
@@ -70,7 +70,7 @@ describe("API", () => {
       payload: { operation: "status" },
     });
     expect(toolStatus.statusCode).toBe(200);
-    expect(toolStatus.json()).toMatchObject({ status: "not_indexed", schemaVersion: 16 });
+    expect(toolStatus.json()).toMatchObject({ status: "not_indexed", schemaVersion: 17 });
 
     const invalid = await app.inject({
       method: "POST",
@@ -180,6 +180,14 @@ describe("API", () => {
     expect(list.json()).toMatchObject({ status: "ok", transactions: [{ transactionId }] });
     const detail = await app.inject({ method: "GET", url: `/v1/archive/transactions/${transactionId}` });
     expect(detail.json()).toMatchObject({ status: "ok", transaction: { transactionId, status: "processing" } });
+    const event = await app.inject({ method: "POST", url: `/v1/archive/transactions/${transactionId}/events`, payload: {
+      eventId: "ANE-api-001", noteId: "person-example-001", filePath: "Characters/Example.md", title: "Example",
+      type: "person", status: "draft", occurredAt: "2026-08-10T04:02:00Z",
+      beforeContent: "Example stood.\n", afterContent: "[[Example]] stood by the tower.\n",
+      actor: "n8n", primaryCategory: "character",
+    } });
+    expect(event.statusCode).toBe(201);
+    expect(event.json()).toMatchObject({ status: "recorded", event_id: "ANE-api-001", metrics: { links_added: 1 } });
   });
 
   it("rejects invalid and client-specific archive submission fields", async () => {

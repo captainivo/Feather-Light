@@ -18,7 +18,7 @@ import { dreamActionSchema, generateDream, operateDream } from "./dream.js";
 import { growthActionSchema, longingActionSchema, operateGrowth, operateLonging } from "./inner.js";
 import { archiveSubmissionSchema } from "./story-archive-contract.js";
 import { archiveTransactionStatuses, getArchiveTransaction, listArchiveTransactions, recordArchiveSubmission, transitionArchiveTransaction } from "./archive-transactions.js";
-import { archiveDevelopmentReport } from "./archive-ledger.js";
+import { archiveDevelopmentReport, recordArchiveNoteChange } from "./archive-ledger.js";
 
 const responseView = z.enum(["brief", "standard"]).default("brief");
 
@@ -123,6 +123,25 @@ export function buildServer(config: Config, database: FeatherDatabase) {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return reply.code(message.startsWith("unknown archive transaction") ? 404 : 409).send({ status: "transition_rejected", error: message });
+    }
+  });
+  app.post("/v1/archive/transactions/:transactionId/events", async (request, reply) => {
+    const params = z.object({ transactionId: z.string().min(1) }).strict().safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ status: "invalid_request", error: params.error.issues });
+    try {
+      const result = recordArchiveNoteChange(database, params.data.transactionId, request.body);
+      return reply.code(201).send({
+        status: "recorded", event_id: result.eventId,
+        metrics: {
+          words_before: result.diff.wordsBefore, words_after: result.diff.wordsAfter,
+          words_added: result.diff.wordsAdded, words_removed: result.diff.wordsRemoved,
+          links_added: result.diff.linksAdded, links_removed: result.diff.linksRemoved,
+          source_hash: result.diff.targetHash,
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return reply.code(message.includes("unknown archive transaction") ? 404 : 409).send({ status: "event_rejected", error: message });
     }
   });
   app.post("/v1/search", async (request, reply) => {

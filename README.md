@@ -147,7 +147,7 @@ The API binds to `127.0.0.1:8765` by default:
 Except for `/health`, API routes require `Authorization: Bearer <token>` when
 `server.authTokenFile` is configured. The VM installer creates the token with mode `0600`; Hermes
 adapters read it from `~/.config/feather-light/api-token`. Do not place the token in command-line
-arguments or logs. The current database schema is version 16 and verifies SHA-256 checksums for all
+arguments or logs. The current database schema is version 17 and verifies SHA-256 checksums for all
 applied migrations.
 
 Story Archive intake is available through two authenticated routes:
@@ -173,6 +173,11 @@ and fenced code, treats wikilink markup as presentation rather than added prose,
 link occurrences, and reports gross additions/removals separately from net change. Reordering the
 same words is classified conservatively as reorganization rather than creative growth; metadata-only
 changes are identified without inventing a meaningful body-edit event.
+
+While a transaction is `processing`, n8n may submit an idempotent note-event request containing
+before and after text. Feather-Light computes the diff and stores only note metadata, hashes,
+counts, categories, actor, and provenance; the transient note bodies are not persisted or returned.
+Reusing an event ID with identical data is safe, while conflicting reuse is rejected.
 
 ## Safety guarantees
 
