@@ -9,3 +9,10 @@ state/
 *.sqlite3
 *.sqlite3-shm
 *.sqlite3-wal
+
+# Private canonical archive and generated per-note migration artifacts.
+The Westpole/
+westpole-archive/
+migration-artifacts/
+story-archive-vault-audit*.json
+story-archive-migration-batch*.json
