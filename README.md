@@ -106,6 +106,12 @@ field, and hashes the complete result. It contains no note bodies and does not w
 Story Archive metadata contract, and emits target hashes plus frontmatter previews. Markdown bodies
 are preserved byte-for-byte and excluded from the preview artifact. Source files remain unchanged.
 
+The transactional apply engine exists as a library and is covered only with synthetic archives. It
+requires an explicit write authorization containing the exact preview hash, rechecks every source,
+body, and target hash, stages same-directory temporary files, and rolls installed files back if the
+batch fails. It is intentionally not exposed by the CLI: configured archive roots remain
+read-only, and enabling canonical writes is a separate post-review deployment decision.
+
 A non-dry-run ingest automatically rebuilds the deterministic entity projection. `entities build`
 is also available when testing classification rules without rescanning the archive.
 

@@ -50,7 +50,7 @@ export function parseArchiveMigrationChangeSet(value: unknown): ParsedArchiveMig
   return changeSet;
 }
 
-function splitMarkdown(text: string): { yaml: string; body: string; eol: "\n" | "\r\n" } {
+export function splitArchiveMarkdown(text: string): { yaml: string; body: string; eol: "\n" | "\r\n" } {
   const eol = text.includes("\r\n") ? "\r\n" : "\n";
   const opening = text.match(/^---\r?\n/);
   if (!opening) return { yaml: "", body: text, eol };
@@ -69,6 +69,19 @@ export interface ArchiveMigrationRenderPreview {
   previewHash: string;
 }
 
+const renderPreviewCoreSchema = z.object({
+  previewVersion: z.literal(1), rootId: z.string().min(1), changeSetHash: z.string().regex(/^[a-f0-9]{64}$/), readOnly: z.literal(true),
+  files: z.array(z.object({ relativePath: z.string().min(1), sourceHash: z.string().regex(/^[a-f0-9]{64}$/), targetHash: z.string().regex(/^[a-f0-9]{64}$/), bodyHash: z.string().regex(/^[a-f0-9]{64}$/), renderedFrontmatter: z.string().startsWith("---") }).strict()),
+}).strict();
+export const archiveMigrationRenderPreviewSchema = renderPreviewCoreSchema.extend({ previewHash: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
+
+export function parseArchiveMigrationRenderPreview(value: unknown): ArchiveMigrationRenderPreview {
+  const preview = archiveMigrationRenderPreviewSchema.parse(value);
+  const { previewHash, ...core } = preview;
+  if (sha256(JSON.stringify(core)) !== previewHash) throw new Error("render preview hash does not match content");
+  return preview;
+}
+
 export function renderArchiveMigrationPreview(config: Config, changeSetValue: unknown): ArchiveMigrationRenderPreview {
   const changeSet = parseArchiveMigrationChangeSet(changeSetValue);
   const root = config.archiveRoots.find((candidate) => candidate.rootId === changeSet.rootId && candidate.enabled);
@@ -80,7 +93,7 @@ export function renderArchiveMigrationPreview(config: Config, changeSetValue: un
     const original = readFileSync(absolutePath);
     if (sha256(original) !== file.sourceHash) throw new Error(`source changed after change-set creation: ${file.relativePath}`);
     const text = original.toString("utf8");
-    const parts = splitMarkdown(text);
+    const parts = splitArchiveMarkdown(text);
     const document = parseDocument(parts.yaml);
     if (document.errors.length > 0) throw new Error(`invalid YAML frontmatter: ${file.relativePath}`);
     for (const change of file.changes) document.set(change.field, change.value);
