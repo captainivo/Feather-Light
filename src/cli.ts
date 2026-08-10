@@ -23,7 +23,7 @@ import { latestEnvironment } from "./environment.js";
 import { generateDream, operateDream } from "./dream.js";
 import { operateGrowth, operateLonging } from "./inner.js";
 import { auditArchiveRoot } from "./archive-migration-audit.js";
-import { planArchiveMigration, type ArchiveMigrationPlan } from "./archive-migration-plan.js";
+import { parseArchiveMigrationPlan, planArchiveMigration, type ArchiveMigrationPlan } from "./archive-migration-plan.js";
 import { createArchiveMigrationReviewTemplate, simulateArchiveMigration } from "./archive-migration-review.js";
 
 const HELP = `Feather-Light — read-only Westpole search
@@ -136,11 +136,11 @@ function migrationPlanFromJson(value: unknown, requestedRoot?: string): ArchiveM
   if (Array.isArray(candidate.plans)) {
     const matches = requestedRoot ? candidate.plans.filter((plan) => plan.rootId === requestedRoot) : candidate.plans;
     if (matches.length !== 1) throw new Error("plan file must contain exactly one matching plan; use --root when needed");
-    return matches[0]!;
+    return parseArchiveMigrationPlan(matches[0]);
   }
   if (typeof candidate.rootId !== "string" || !Array.isArray(candidate.files)) throw new Error("invalid migration plan file");
   if (requestedRoot && candidate.rootId !== requestedRoot) throw new Error("plan root does not match --root");
-  return candidate as ArchiveMigrationPlan;
+  return parseArchiveMigrationPlan(candidate);
 }
 
 function runArchiveCommand(args: string[]): void {

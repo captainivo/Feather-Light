@@ -7,6 +7,7 @@ import { safeMarkdownFiles } from "./ingest.js";
 import { parseMarkdown } from "./markdown.js";
 import { canonStatuses } from "./story-archive-contract.js";
 import { findGitRepository, gitFirstAddEvidence } from "./git-history.js";
+import { z } from "zod";
 
 type ReviewLevel = "mechanical" | "review" | "manual";
 
@@ -26,13 +27,50 @@ export interface ArchiveMigrationPlanFile {
 }
 
 export interface ArchiveMigrationPlan {
-  planVersion: number;
+  planVersion: 1;
   rootId: string;
   batchLimit: number;
   totalEligibleFiles: number;
   plannedFiles: number;
   remainingFiles: number;
   files: ArchiveMigrationPlanFile[];
+}
+
+const relativeArchivePath = z.string().min(1).refine(
+  (value) => !value.startsWith("/") && !value.startsWith("\\") && !value.split(/[\\/]/).includes(".."),
+  "must be a relative path contained by the archive root",
+);
+
+export const archiveMigrationPlanSchema = z.object({
+  planVersion: z.literal(1),
+  rootId: z.string().min(1),
+  batchLimit: z.number().int().min(1).max(500),
+  totalEligibleFiles: z.number().int().nonnegative(),
+  plannedFiles: z.number().int().nonnegative(),
+  remainingFiles: z.number().int().nonnegative(),
+  files: z.array(z.object({
+    relativePath: relativeArchivePath,
+    sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
+    disposition: z.enum(["mechanical", "review_required", "manual_required"]),
+    proposals: z.array(z.object({
+      field: z.string().min(1),
+      value: z.unknown(),
+      source: z.string().min(1),
+      level: z.enum(["mechanical", "review", "manual"]),
+      reason: z.string().min(1),
+    }).strict()),
+  }).strict()),
+}).strict().superRefine((plan, context) => {
+  if (plan.plannedFiles !== plan.files.length) context.addIssue({ code: "custom", path: ["plannedFiles"], message: "must equal files length" });
+  if (plan.totalEligibleFiles !== plan.plannedFiles + plan.remainingFiles) context.addIssue({ code: "custom", path: ["totalEligibleFiles"], message: "must equal planned plus remaining files" });
+});
+
+export function parseArchiveMigrationPlan(value: unknown): ArchiveMigrationPlan {
+  return archiveMigrationPlanSchema.parse(value);
+}
+
+export function archiveMigrationPlanHash(plan: ArchiveMigrationPlan): string {
+  return sha256(JSON.stringify(parseArchiveMigrationPlan(plan)));
 }
 
 const directoryDefaults: Array<[string, string, string]> = [

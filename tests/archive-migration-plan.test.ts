@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import type { Config } from "../src/config.js";
-import { planArchiveMigration } from "../src/archive-migration-plan.js";
+import { archiveMigrationPlanHash, parseArchiveMigrationPlan, planArchiveMigration } from "../src/archive-migration-plan.js";
 
 function fixture(): { config: Config; notes: string[] } {
   const base = join(process.env.TMPDIR ?? "/tmp", `feather-plan-${crypto.randomUUID()}`);
@@ -59,7 +59,16 @@ describe("Phase 0.5 migration batch planner", () => {
     const first = planArchiveMigration(config, "westpole", 1);
     const repeated = planArchiveMigration(config, "westpole", 1);
     expect(first).toEqual(repeated);
+    expect(archiveMigrationPlanHash(first)).toBe(archiveMigrationPlanHash(repeated));
+    expect(parseArchiveMigrationPlan(first)).toEqual(first);
     expect(first).toMatchObject({ plannedFiles: 1, remainingFiles: 1 });
+  });
+
+  it("rejects malformed plans and paths that escape the archive", () => {
+    const { config } = fixture();
+    const plan = planArchiveMigration(config, "westpole", 1);
+    plan.files[0]!.relativePath = "../outside.md";
+    expect(() => parseArchiveMigrationPlan(plan)).toThrow();
   });
 
   it("uses Git first-add history as reviewable created-date evidence", () => {

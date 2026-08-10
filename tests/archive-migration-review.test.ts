@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Config } from "../src/config.js";
-import { planArchiveMigration } from "../src/archive-migration-plan.js";
+import { archiveMigrationPlanHash, planArchiveMigration } from "../src/archive-migration-plan.js";
 import { createArchiveMigrationReviewTemplate, simulateArchiveMigration } from "../src/archive-migration-review.js";
 
 function fixture(): { config: Config; note: string } {
@@ -31,6 +31,7 @@ function reviewFor(plan: ReturnType<typeof planArchiveMigration>, action: "appro
   return {
     reviewVersion: 1 as const,
     planVersion: 1 as const,
+    planHash: archiveMigrationPlanHash(plan),
     rootId: plan.rootId,
     decisions: file.proposals.filter((proposal) => proposal.level !== "mechanical").map((proposal) => ({
       relativePath: file.relativePath,
@@ -66,7 +67,7 @@ describe("archive migration review simulation", () => {
   it("keeps unapproved or rejected canon decisions unresolved", () => {
     const { config } = fixture();
     const plan = planArchiveMigration(config, "test");
-    expect(simulateArchiveMigration(config, plan, { reviewVersion: 1, planVersion: 1, rootId: "test", decisions: [] }).summary.unresolved).toBe(1);
+    expect(simulateArchiveMigration(config, plan, { reviewVersion: 1, planVersion: 1, planHash: archiveMigrationPlanHash(plan), rootId: "test", decisions: [] }).summary.unresolved).toBe(1);
     const rejected = simulateArchiveMigration(config, plan, reviewFor(plan, "reject"));
     expect(rejected.files[0]).toMatchObject({ status: "unresolved" });
     expect(rejected.files[0]!.rejectedFields.length).toBeGreaterThan(0);
@@ -87,12 +88,20 @@ describe("archive migration review simulation", () => {
     expect(simulateArchiveMigration(config, plan, review).summary.stale).toBe(1);
   });
 
+  it("rejects a review when any proposal in its bound plan changes", () => {
+    const { config } = fixture();
+    const plan = planArchiveMigration(config, "test");
+    const review = reviewFor(plan);
+    plan.files[0]!.proposals[0]!.value = "tampered-value";
+    expect(() => simulateArchiveMigration(config, plan, review)).toThrow("review plan hash does not match");
+  });
+
   it("rejects decisions that do not correspond to plan proposals", () => {
     const { config } = fixture();
     const plan = planArchiveMigration(config, "test");
     const file = plan.files[0]!;
     expect(() => simulateArchiveMigration(config, plan, {
-      reviewVersion: 1, planVersion: 1, rootId: "test", decisions: [{
+      reviewVersion: 1, planVersion: 1, planHash: archiveMigrationPlanHash(plan), rootId: "test", decisions: [{
         relativePath: file.relativePath, sourceHash: file.sourceHash, field: "invented", action: "approve",
         reviewer: "fixture-reviewer", decidedAt: "2026-08-09T12:00:00-07:00",
       }],

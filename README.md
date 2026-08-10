@@ -91,6 +91,8 @@ CLI refuses to place simulation output inside any configured archive root.
 `review-template` accepts the envelope produced by `archive plan` and creates one pending entry for
 each review or manual proposal. Complete an entry by changing its action and adding `reviewer` and
 an offset-aware `decidedAt`; replacement decisions also require a `value`.
+Each review records a SHA-256 hash of the fully validated plan. Simulation refuses the review if any
+path, proposal, reason, source hash, or batch count changed after the template was generated.
 
 A non-dry-run ingest automatically rebuilds the deterministic entity projection. `entities build`
 is also available when testing classification rules without rescanning the archive.

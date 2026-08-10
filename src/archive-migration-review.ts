@@ -2,7 +2,7 @@ import { basename, extname, join, relative } from "node:path";
 import { readFileSync, realpathSync } from "node:fs";
 import { z } from "zod";
 import type { Config } from "./config.js";
-import type { ArchiveMigrationPlan, MigrationFieldProposal } from "./archive-migration-plan.js";
+import { archiveMigrationPlanHash, type ArchiveMigrationPlan, type MigrationFieldProposal } from "./archive-migration-plan.js";
 import { sha256, stableId } from "./hash.js";
 import { parseMarkdown } from "./markdown.js";
 import { storyNoteMetadataSchema } from "./story-archive-contract.js";
@@ -34,6 +34,7 @@ const decisionSchema = z.object({
 export const archiveMigrationReviewSchema = z.object({
   reviewVersion: z.literal(1),
   planVersion: z.literal(1),
+  planHash: z.string().regex(/^[a-f0-9]{64}$/),
   rootId: z.string().min(1),
   decisions: z.array(decisionSchema),
 }).strict();
@@ -73,6 +74,7 @@ export function createArchiveMigrationReviewTemplate(plan: ArchiveMigrationPlan)
   return {
     reviewVersion: 1,
     planVersion: 1,
+    planHash: archiveMigrationPlanHash(plan),
     rootId: plan.rootId,
     decisions: plan.files.flatMap((file) => file.proposals
       .filter((proposal): proposal is MigrationFieldProposal & { level: "review" | "manual" } => proposal.level !== "mechanical")
@@ -105,6 +107,7 @@ export function simulateArchiveMigration(
   const review = parseArchiveMigrationReview(reviewValue);
   if (review.rootId !== plan.rootId) throw new Error("review root does not match migration plan");
   if (review.planVersion !== plan.planVersion) throw new Error("review plan version does not match migration plan");
+  if (review.planHash !== archiveMigrationPlanHash(plan)) throw new Error("review plan hash does not match migration plan");
   const root = config.archiveRoots.find((candidate) => candidate.rootId === plan.rootId && candidate.enabled);
   if (!root) throw new Error(`unknown or disabled archive root: ${plan.rootId}`);
   const rootPath = realpathSync(root.path);
