@@ -168,6 +168,12 @@ intake validation may also move `pending -> failed`. Authenticated list, detail,
 routes expose bounded procedural state without returning stored source bodies. Terminal records
 retain completion time, summary, Git commit when present, and failure provenance.
 
+Development-event metrics are supplied by a deterministic Markdown diff. It excludes frontmatter
+and fenced code, treats wikilink markup as presentation rather than added prose, counts repeated
+link occurrences, and reports gross additions/removals separately from net change. Reordering the
+same words is classified conservatively as reorganization rather than creative growth; metadata-only
+changes are identified without inventing a meaningful body-edit event.
+
 ## Safety guarantees
 
 - Archive roots must be explicitly configured as read-only.
