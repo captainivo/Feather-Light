@@ -163,6 +163,11 @@ to archive transactions. `GET /v1/archive/reports/development?from=<ISO>&to=<ISO
 event, note, active-day, word-change, link-change, action, category, and subject metrics for a
 half-open time range. The ledger contains development activity and provenance, not canonical lore.
 
+Archive transactions follow a guarded `pending -> processing -> succeeded|failed|partial` lifecycle;
+intake validation may also move `pending -> failed`. Authenticated list, detail, and transition
+routes expose bounded procedural state without returning stored source bodies. Terminal records
+retain completion time, summary, Git commit when present, and failure provenance.
+
 ## Safety guarantees
 
 - Archive roots must be explicitly configured as read-only.

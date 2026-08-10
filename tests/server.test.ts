@@ -161,6 +161,27 @@ describe("API", () => {
     expect(invalid.statusCode).toBe(400);
   });
 
+  it("exposes guarded archive transaction lifecycle routes", async () => {
+    const database = openDatabase(":memory:");
+    migrate(database);
+    const app = buildServer(config, database);
+    resources.push(app);
+    const created = await app.inject({ method: "POST", url: "/v1/archive/submissions", payload: {
+      submission_id: "SUB-lifecycle-001", mode: "archive", source_client: "n8n",
+      submitted_at: "2026-08-10T04:00:00Z", content: "Synthetic lifecycle request.", requested_status: "draft",
+    } });
+    const transactionId = created.json().transaction_id as string;
+    const processing = await app.inject({ method: "PATCH", url: `/v1/archive/transactions/${transactionId}`, payload: {
+      status: "processing", occurredAt: "2026-08-10T04:01:00Z", summary: "Checks started.",
+    } });
+    expect(processing.statusCode).toBe(200);
+    expect(processing.json()).toMatchObject({ transaction: { status: "processing" } });
+    const list = await app.inject({ method: "GET", url: "/v1/archive/transactions?status=processing&limit=1" });
+    expect(list.json()).toMatchObject({ status: "ok", transactions: [{ transactionId }] });
+    const detail = await app.inject({ method: "GET", url: `/v1/archive/transactions/${transactionId}` });
+    expect(detail.json()).toMatchObject({ status: "ok", transaction: { transactionId, status: "processing" } });
+  });
+
   it("rejects invalid and client-specific archive submission fields", async () => {
     const database = openDatabase(":memory:");
     migrate(database);

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { migrate, openDatabase, type FeatherDatabase } from "../src/database.js";
-import { archiveSubmissionHash, recordArchiveSubmission } from "../src/archive-transactions.js";
+import { archiveSubmissionHash, getArchiveTransaction, listArchiveTransactions, recordArchiveSubmission, transitionArchiveTransaction } from "../src/archive-transactions.js";
 import { parseArchiveSubmission } from "../src/story-archive-contract.js";
 
 const databases: FeatherDatabase[] = [];
@@ -67,5 +67,32 @@ describe("archive transaction intake", () => {
       metadata: { a: { first: true, second: true }, z: 1 },
     });
     expect(archiveSubmissionHash(reordered)).toBe(archiveSubmissionHash(submission));
+  });
+
+  it("enforces the pending-processing-terminal transaction lifecycle", () => {
+    const db = database();
+    const created = recordArchiveSubmission(db, submission).transaction;
+    const processing = transitionArchiveTransaction(db, created.transactionId, { status: "processing", occurredAt: "2026-08-10T04:02:00Z", summary: "Deterministic checks started." });
+    expect(processing).toMatchObject({ status: "processing", completedAt: null });
+    const succeeded = transitionArchiveTransaction(db, created.transactionId, { status: "succeeded", occurredAt: "2026-08-10T04:03:00Z", summary: "Committed one note.", gitCommit: "abc123" });
+    expect(succeeded).toMatchObject({ status: "succeeded", completedAt: "2026-08-10T04:03:00Z", gitCommit: "abc123" });
+    expect(() => transitionArchiveTransaction(db, created.transactionId, { status: "failed", occurredAt: "2026-08-10T04:04:00Z", errorSummary: "too late" })).toThrow("succeeded -> failed");
+  });
+
+  it("requires failure provenance and permits a direct intake failure", () => {
+    const db = database();
+    const created = recordArchiveSubmission(db, submission).transaction;
+    expect(() => transitionArchiveTransaction(db, created.transactionId, { status: "failed", occurredAt: "2026-08-10T04:02:00Z" })).toThrow("require an error summary");
+    const failed = transitionArchiveTransaction(db, created.transactionId, { status: "failed", occurredAt: "2026-08-10T04:02:00Z", errorSummary: "Validation dependency unavailable." });
+    expect(failed).toMatchObject({ status: "failed", errorSummary: "Validation dependency unavailable." });
+  });
+
+  it("lists bounded transactions without returning stored request bodies", () => {
+    const db = database();
+    const created = recordArchiveSubmission(db, submission).transaction;
+    expect(getArchiveTransaction(db, created.transactionId)).toEqual(created);
+    const listed = listArchiveTransactions(db, { status: "pending", limit: 1 });
+    expect(listed).toHaveLength(1);
+    expect(listed[0]).not.toHaveProperty("requestJson");
   });
 });

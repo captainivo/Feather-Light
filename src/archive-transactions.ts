@@ -1,6 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { FeatherDatabase } from "./database.js";
 import type { ArchiveSubmission } from "./story-archive-contract.js";
+import { z } from "zod";
+
+export const archiveTransactionStatuses = ["pending", "processing", "succeeded", "failed", "partial"] as const;
 
 export interface ArchiveTransaction {
   transactionId: string;
@@ -12,6 +15,10 @@ export interface ArchiveTransaction {
   receivedAt: string;
   requestedStatus: ArchiveSubmission["requested_status"];
   status: "pending" | "processing" | "succeeded" | "failed" | "partial";
+  completedAt: string | null;
+  summary: string | null;
+  gitCommit: string | null;
+  errorSummary: string | null;
 }
 
 export type RecordArchiveSubmissionResult =
@@ -29,6 +36,10 @@ interface TransactionRow {
   received_at: string;
   requested_status: ArchiveSubmission["requested_status"];
   status: ArchiveTransaction["status"];
+  completed_at: string | null;
+  summary: string | null;
+  git_commit: string | null;
+  error_summary: string | null;
 }
 
 function canonicalize(value: unknown): unknown {
@@ -62,6 +73,10 @@ function mapTransaction(row: TransactionRow): ArchiveTransaction {
     receivedAt: row.received_at,
     requestedStatus: row.requested_status,
     status: row.status,
+    completedAt: row.completed_at,
+    summary: row.summary,
+    gitCommit: row.git_commit,
+    errorSummary: row.error_summary,
   };
 }
 
@@ -91,7 +106,7 @@ export function recordArchiveSubmission(
   );
   const row = database.prepare(`
     SELECT transaction_id, submission_id, request_hash, mode, source_client,
-      submitted_at, received_at, requested_status, status
+      submitted_at, received_at, requested_status, status, completed_at, summary, git_commit, error_summary
     FROM archive_transactions WHERE submission_id = ?
   `).get(submission.submission_id) as TransactionRow | undefined;
   if (!row) throw new Error("archive transaction insert did not produce a readable row");
@@ -100,4 +115,64 @@ export function recordArchiveSubmission(
   return row.request_hash === requestHash
     ? { outcome: "replayed", transaction }
     : { outcome: "conflict", transaction };
+}
+
+const transactionColumns = `transaction_id, submission_id, request_hash, mode, source_client,
+  submitted_at, received_at, requested_status, status, completed_at, summary, git_commit, error_summary`;
+
+export function getArchiveTransaction(database: FeatherDatabase, transactionId: string): ArchiveTransaction | null {
+  const row = database.prepare(`SELECT ${transactionColumns} FROM archive_transactions WHERE transaction_id = ?`).get(transactionId) as TransactionRow | undefined;
+  return row ? mapTransaction(row) : null;
+}
+
+export function listArchiveTransactions(
+  database: FeatherDatabase,
+  options: { status?: ArchiveTransaction["status"]; limit?: number } = {},
+): ArchiveTransaction[] {
+  const limit = z.number().int().min(1).max(100).parse(options.limit ?? 20);
+  const status = options.status === undefined ? undefined : z.enum(archiveTransactionStatuses).parse(options.status);
+  const rows = status
+    ? database.prepare(`SELECT ${transactionColumns} FROM archive_transactions WHERE status = ? ORDER BY received_at DESC, transaction_id DESC LIMIT ?`).all(status, limit)
+    : database.prepare(`SELECT ${transactionColumns} FROM archive_transactions ORDER BY received_at DESC, transaction_id DESC LIMIT ?`).all(limit);
+  return (rows as TransactionRow[]).map(mapTransaction);
+}
+
+export const archiveTransactionTransitionSchema = z.object({
+  status: z.enum(["processing", "succeeded", "failed", "partial"]),
+  occurredAt: z.iso.datetime({ offset: true }),
+  summary: z.string().trim().min(1).max(2_000).optional(),
+  gitCommit: z.string().trim().min(1).max(120).optional(),
+  errorSummary: z.string().trim().min(1).max(2_000).optional(),
+}).strict().superRefine((transition, context) => {
+  if (transition.status === "processing" && (transition.gitCommit || transition.errorSummary)) context.addIssue({ code: "custom", message: "processing transitions cannot be terminal" });
+  if (transition.status === "succeeded" && transition.errorSummary) context.addIssue({ code: "custom", path: ["errorSummary"], message: "successful transactions cannot have an error summary" });
+  if (transition.status === "failed" && !transition.errorSummary) context.addIssue({ code: "custom", path: ["errorSummary"], message: "failed transactions require an error summary" });
+});
+
+export function transitionArchiveTransaction(database: FeatherDatabase, transactionId: string, value: unknown): ArchiveTransaction {
+  const transition = archiveTransactionTransitionSchema.parse(value);
+  const current = getArchiveTransaction(database, transactionId);
+  if (!current) throw new Error(`unknown archive transaction: ${transactionId}`);
+  if (current.status === transition.status) return current;
+  const allowed = current.status === "pending"
+    ? new Set<ArchiveTransaction["status"]>(["processing", "failed"])
+    : current.status === "processing"
+      ? new Set<ArchiveTransaction["status"]>(["succeeded", "failed", "partial"])
+      : new Set<ArchiveTransaction["status"]>();
+  if (!allowed.has(transition.status)) throw new Error(`invalid archive transaction transition: ${current.status} -> ${transition.status}`);
+  const terminal = transition.status !== "processing";
+  const result = database.prepare(`
+    UPDATE archive_transactions SET status=?, completed_at=?, summary=?, git_commit=?, error_summary=?
+    WHERE transaction_id=? AND status=?
+  `).run(
+    transition.status,
+    terminal ? transition.occurredAt : null,
+    transition.summary ?? null,
+    transition.gitCommit ?? null,
+    transition.errorSummary ?? null,
+    transactionId,
+    current.status,
+  );
+  if (result.changes !== 1) throw new Error("archive transaction changed concurrently");
+  return getArchiveTransaction(database, transactionId)!;
 }

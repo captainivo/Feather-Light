@@ -17,7 +17,7 @@ import { indexStatus } from "./status.js";
 import { dreamActionSchema, generateDream, operateDream } from "./dream.js";
 import { growthActionSchema, longingActionSchema, operateGrowth, operateLonging } from "./inner.js";
 import { archiveSubmissionSchema } from "./story-archive-contract.js";
-import { recordArchiveSubmission } from "./archive-transactions.js";
+import { archiveTransactionStatuses, getArchiveTransaction, listArchiveTransactions, recordArchiveSubmission, transitionArchiveTransaction } from "./archive-transactions.js";
 import { archiveDevelopmentReport } from "./archive-ledger.js";
 
 const responseView = z.enum(["brief", "standard"]).default("brief");
@@ -99,6 +99,30 @@ export function buildServer(config: Config, database: FeatherDatabase) {
       return { status: "ok", report: archiveDevelopmentReport(database, parsed.data.from, parsed.data.to) };
     } catch (error) {
       return reply.code(400).send({ status: "invalid_request", error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.get("/v1/archive/transactions", async (request, reply) => {
+    const parsed = z.object({ status: z.enum(archiveTransactionStatuses).optional(), limit: z.coerce.number().int().min(1).max(100).default(20) }).strict().safeParse(request.query);
+    if (!parsed.success) return reply.code(400).send({ status: "invalid_request", error: parsed.error.issues });
+    return { status: "ok", transactions: listArchiveTransactions(database, {
+      limit: parsed.data.limit,
+      ...(parsed.data.status === undefined ? {} : { status: parsed.data.status }),
+    }) };
+  });
+  app.get("/v1/archive/transactions/:transactionId", async (request, reply) => {
+    const parsed = z.object({ transactionId: z.string().min(1) }).strict().safeParse(request.params);
+    if (!parsed.success) return reply.code(400).send({ status: "invalid_request", error: parsed.error.issues });
+    const transaction = getArchiveTransaction(database, parsed.data.transactionId);
+    return transaction ? { status: "ok", transaction } : reply.code(404).send({ status: "not_found" });
+  });
+  app.patch("/v1/archive/transactions/:transactionId", async (request, reply) => {
+    const params = z.object({ transactionId: z.string().min(1) }).strict().safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ status: "invalid_request", error: params.error.issues });
+    try {
+      return { status: "ok", transaction: transitionArchiveTransaction(database, params.data.transactionId, request.body) };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return reply.code(message.startsWith("unknown archive transaction") ? 404 : 409).send({ status: "transition_rejected", error: message });
     }
   });
   app.post("/v1/search", async (request, reply) => {
