@@ -91,3 +91,14 @@ ID, and `transaction_status: "pending"`. It still does not write canon or create
 the original transaction with `replayed: true`. Reusing that ID with a different request returns
 HTTP 409 with `status: "idempotency_conflict"`. Metadata object key order does not affect request
 identity.
+
+## Existing-vault migration audit
+
+`npm run cli -- archive audit` performs the Phase 0.5 read-only scan. For each Markdown file it
+records the source hash, effective title, existing fields, missing required fields, invalid values,
+and a deterministic proposed ID when no ID exists. The proposal is advisory and is never written to
+the note.
+
+Use `--root ROOT_ID` to select one configured root and `--output MANIFEST.json` to save the complete
+manifest outside the vault. The output contains a deterministic `manifestHash` suitable for review
+and later batch approval. No audit operation writes Markdown or mutates the retrieval index.

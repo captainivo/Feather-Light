@@ -27,6 +27,8 @@ machine-specific paths are not published.
 npm run cli -- status
 npm run cli -- ingest --dry-run
 npm run cli -- ingest
+npm run cli -- archive audit
+npm run cli -- archive audit --output /safe/path/story-archive-audit.json
 npm run cli -- search "Aanu"
 npm run cli -- search --limit 5 --dedupe title "Aanu-Kathara"
 npm run cli -- show sec_ab11f1ed3840bfafc4b84c59
@@ -60,6 +62,11 @@ Search deduplication is caller-controlled:
 Duplicate source records are never deleted or merged automatically. The CLI reports them so
 later entity resolution can preserve their separate provenance and select or review a preferred
 record explicitly.
+
+`archive audit` is the Phase 0.5 migration scanner. It reads every eligible Markdown file directly,
+reports missing and invalid Story Archive metadata, proposes IDs for review, and calculates a
+deterministic manifest hash. It never edits the vault or writes to the index database. Manifest
+output is refused if its path is inside any configured archive root.
 
 A non-dry-run ingest automatically rebuilds the deterministic entity projection. `entities build`
 is also available when testing classification rules without rescanning the archive.

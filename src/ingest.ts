@@ -9,7 +9,7 @@ import type { IngestResult, ParsedMarkdown } from "./types.js";
 const PARSER_VERSION = "2";
 const excludedNames = new Set([".git", ".obsidian", ".trash", ".DS_Store"]);
 
-function safeMarkdownFiles(rootPath: string, maxFileBytes: number): string[] {
+export function safeMarkdownFiles(rootPath: string, maxFileBytes: number): string[] {
   const root = realpathSync(rootPath);
   const found: string[] = [];
   const walk = (directory: string): void => {

@@ -1,4 +1,6 @@
 import { parseArgs } from "node:util";
+import { dirname, resolve, sep } from "node:path";
+import { realpathSync, writeFileSync } from "node:fs";
 import { ensureEnvironmentCurrent } from "./aauthora.js";
 import { listChronologyPeriods, queryChronology, rebuildChronology } from "./chronology.js";
 import { loadConfig } from "./config.js";
@@ -20,12 +22,14 @@ import { indexStatus } from "./status.js";
 import { latestEnvironment } from "./environment.js";
 import { generateDream, operateDream } from "./dream.js";
 import { operateGrowth, operateLonging } from "./inner.js";
+import { auditArchiveRoot } from "./archive-migration-audit.js";
 
 const HELP = `Feather-Light — read-only Westpole search
 
 Usage:
   npm run cli -- status
   npm run cli -- ingest [--dry-run] [--root ROOT_ID]
+  npm run cli -- archive audit [--root ROOT_ID] [--output MANIFEST.json]
   npm run cli -- search [--limit N] [--dedupe MODE] <words>
   npm run cli -- show <SECTION_ID>
   npm run cli -- get [--relations N] <ENTITY_ID_OR_EXACT_NAME>
@@ -113,10 +117,61 @@ function printLongingEntry(entry: Record<string, unknown>): void {
   console.log(`   ${String(entry.created_at)}`);
 }
 
+function outputIsInsideArchive(outputPath: string, archivePath: string): boolean {
+  const output = resolve(outputPath);
+  const archive = resolve(archivePath);
+  if (output === archive || output.startsWith(`${archive}${sep}`)) return true;
+  const outputParent = realpathSync(dirname(output));
+  const archiveReal = realpathSync(archivePath);
+  return outputParent === archiveReal || outputParent.startsWith(`${archiveReal}${sep}`);
+}
+
+function runArchiveAudit(args: string[]): void {
+  const [operation = "audit", ...auditArgs] = args;
+  if (operation !== "audit") throw new Error("archive operation must be audit");
+  const config = loadConfig();
+  const { values } = parseArgs({ args: auditArgs, options: {
+    root: { type: "string" },
+    output: { type: "string", short: "o" },
+  } });
+  const roots = values.root
+    ? [values.root]
+    : config.archiveRoots.filter((root) => root.enabled).map((root) => root.rootId);
+  const audits = roots.map((rootId) => auditArchiveRoot(config, rootId));
+  const result = { status: "ok", readOnly: true, audits };
+  const serialized = `${JSON.stringify(result, null, 2)}\n`;
+  if (values.output) {
+    if (config.archiveRoots.some((root) => outputIsInsideArchive(values.output!, root.path))) {
+      throw new Error("audit manifest output must be outside every configured archive root");
+    }
+    writeFileSync(resolve(values.output), serialized, { encoding: "utf8", mode: 0o600 });
+    console.log(JSON.stringify({
+      status: "ok",
+      readOnly: true,
+      output: resolve(values.output),
+      roots: audits.map((audit) => ({
+        rootId: audit.rootId,
+        filesSeen: audit.filesSeen,
+        readyFiles: audit.readyFiles,
+        migrationRequiredFiles: audit.migrationRequiredFiles,
+        errors: audit.errors.length,
+        manifestHash: audit.manifestHash,
+      })),
+    }, null, 2));
+  } else {
+    console.log(serialized.trimEnd());
+  }
+}
+
 async function main(): Promise<void> {
   const [command = "help", ...rest] = process.argv.slice(2);
   if (["help", "--help", "-h"].includes(command)) {
     console.log(HELP);
+    return;
+  }
+
+  if (command === "archive") {
+    runArchiveAudit(rest);
     return;
   }
 
