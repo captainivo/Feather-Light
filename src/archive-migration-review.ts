@@ -59,6 +59,25 @@ export interface ArchiveMigrationSimulation {
   summary: { ready: number; unresolved: number; stale: number; invalid: number };
 }
 
+export interface ArchiveMigrationChangeSet {
+  changeSetVersion: 1;
+  rootId: string;
+  planHash: string;
+  readOnly: true;
+  files: Array<{
+    relativePath: string;
+    sourceHash: string;
+    changes: Array<{
+      field: string;
+      value: unknown;
+      authority: "mechanical" | "approved" | "replaced";
+      reviewer?: string;
+      decidedAt?: string;
+    }>;
+  }>;
+  changeSetHash: string;
+}
+
 function proposalKey(relativePath: string, field: string): string {
   return `${relativePath}\u0000${field}`;
 }
@@ -178,4 +197,42 @@ export function simulateArchiveMigration(
       invalid: files.filter((file) => file.status === "invalid").length,
     },
   };
+}
+
+export function buildArchiveMigrationChangeSet(
+  config: Config,
+  plan: ArchiveMigrationPlan,
+  reviewValue: unknown,
+): ArchiveMigrationChangeSet {
+  const simulation = simulateArchiveMigration(config, plan, reviewValue);
+  if (simulation.summary.ready !== plan.files.length) {
+    throw new Error(`change set requires every file to be ready: ${JSON.stringify(simulation.summary)}`);
+  }
+  const review = parseArchiveMigrationReview(reviewValue);
+  const decisions = new Map(review.decisions.map((decision) => [proposalKey(decision.relativePath, decision.field), decision] as const));
+  const core = {
+    changeSetVersion: 1 as const,
+    rootId: plan.rootId,
+    planHash: archiveMigrationPlanHash(plan),
+    readOnly: true as const,
+    files: plan.files.map((file) => ({
+      relativePath: file.relativePath,
+      sourceHash: file.sourceHash,
+      changes: file.proposals.map((proposal) => {
+        const decision = decisions.get(proposalKey(file.relativePath, proposal.field));
+        const value = decisionValue(proposal, decision);
+        if (value === undefined) throw new Error("ready simulation produced an unresolved proposal");
+        if (proposal.level === "mechanical") return { field: proposal.field, value, authority: "mechanical" as const };
+        if (!decision?.reviewer || !decision.decidedAt) throw new Error("reviewed proposal is missing provenance");
+        return {
+          field: proposal.field,
+          value,
+          authority: decision.action === "replace" ? "replaced" as const : "approved" as const,
+          reviewer: decision.reviewer,
+          decidedAt: decision.decidedAt,
+        };
+      }),
+    })),
+  };
+  return { ...core, changeSetHash: sha256(JSON.stringify(core)) };
 }

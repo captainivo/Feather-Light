@@ -63,6 +63,16 @@ export const archiveMigrationPlanSchema = z.object({
 }).strict().superRefine((plan, context) => {
   if (plan.plannedFiles !== plan.files.length) context.addIssue({ code: "custom", path: ["plannedFiles"], message: "must equal files length" });
   if (plan.totalEligibleFiles !== plan.plannedFiles + plan.remainingFiles) context.addIssue({ code: "custom", path: ["totalEligibleFiles"], message: "must equal planned plus remaining files" });
+  const paths = new Set<string>();
+  for (const [fileIndex, file] of plan.files.entries()) {
+    if (paths.has(file.relativePath)) context.addIssue({ code: "custom", path: ["files", fileIndex, "relativePath"], message: "duplicate file path" });
+    paths.add(file.relativePath);
+    const fields = new Set<string>();
+    for (const [proposalIndex, proposal] of file.proposals.entries()) {
+      if (fields.has(proposal.field)) context.addIssue({ code: "custom", path: ["files", fileIndex, "proposals", proposalIndex, "field"], message: "duplicate proposal field" });
+      fields.add(proposal.field);
+    }
+  }
 });
 
 export function parseArchiveMigrationPlan(value: unknown): ArchiveMigrationPlan {

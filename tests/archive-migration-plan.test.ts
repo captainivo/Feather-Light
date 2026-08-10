@@ -71,6 +71,18 @@ describe("Phase 0.5 migration batch planner", () => {
     expect(() => parseArchiveMigrationPlan(plan)).toThrow();
   });
 
+  it("rejects duplicate file paths and duplicate proposal fields", () => {
+    const { config } = fixture();
+    const duplicateFilePlan = planArchiveMigration(config, "westpole", 1);
+    duplicateFilePlan.files.push(duplicateFilePlan.files[0]!);
+    duplicateFilePlan.plannedFiles = 2;
+    duplicateFilePlan.totalEligibleFiles = duplicateFilePlan.plannedFiles + duplicateFilePlan.remainingFiles;
+    expect(() => parseArchiveMigrationPlan(duplicateFilePlan)).toThrow("duplicate file path");
+    const duplicateFieldPlan = planArchiveMigration(config, "westpole", 1);
+    duplicateFieldPlan.files[0]!.proposals.push(duplicateFieldPlan.files[0]!.proposals[0]!);
+    expect(() => parseArchiveMigrationPlan(duplicateFieldPlan)).toThrow("duplicate proposal field");
+  });
+
   it("uses Git first-add history as reviewable created-date evidence", () => {
     const { config } = fixture();
     const root = config.archiveRoots[0]!.path;

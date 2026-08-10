@@ -24,7 +24,7 @@ import { generateDream, operateDream } from "./dream.js";
 import { operateGrowth, operateLonging } from "./inner.js";
 import { auditArchiveRoot } from "./archive-migration-audit.js";
 import { parseArchiveMigrationPlan, planArchiveMigration, type ArchiveMigrationPlan } from "./archive-migration-plan.js";
-import { createArchiveMigrationReviewTemplate, simulateArchiveMigration } from "./archive-migration-review.js";
+import { buildArchiveMigrationChangeSet, createArchiveMigrationReviewTemplate, simulateArchiveMigration } from "./archive-migration-review.js";
 import { renderArchiveMigrationReviewPage } from "./archive-migration-review-page.js";
 
 const HELP = `Feather-Light — read-only Westpole search
@@ -37,6 +37,7 @@ Usage:
   npm run cli -- archive review-template --plan PLAN.json [--root ROOT_ID] --output REVIEW.json
   npm run cli -- archive review-page --review REVIEW.json --output REVIEW.html
   npm run cli -- archive simulate --plan PLAN.json --review REVIEW.json [--output RESULT.json]
+  npm run cli -- archive changeset --plan PLAN.json --review REVIEW.json --output CHANGESET.json
   npm run cli -- search [--limit N] [--dedupe MODE] <words>
   npm run cli -- show <SECTION_ID>
   npm run cli -- get [--relations N] <ENTITY_ID_OR_EXACT_NAME>
@@ -147,7 +148,7 @@ function migrationPlanFromJson(value: unknown, requestedRoot?: string): ArchiveM
 
 function runArchiveCommand(args: string[]): void {
   const [operation = "audit", ...auditArgs] = args;
-  if (!new Set(["audit", "plan", "review-template", "review-page", "simulate"]).has(operation)) throw new Error("archive operation must be audit, plan, review-template, review-page, or simulate");
+  if (!new Set(["audit", "plan", "review-template", "review-page", "simulate", "changeset"]).has(operation)) throw new Error("archive operation must be audit, plan, review-template, review-page, simulate, or changeset");
   const config = loadConfig();
   const { values } = parseArgs({ args: auditArgs, options: {
     root: { type: "string" },
@@ -164,7 +165,7 @@ function runArchiveCommand(args: string[]): void {
     console.log(JSON.stringify({ status: "ok", readOnly: true, offline: true, output: resolve(values.output) }, null, 2));
     return;
   }
-  if (operation === "review-template" || operation === "simulate") {
+  if (operation === "review-template" || operation === "simulate" || operation === "changeset") {
     if (!values.plan) throw new Error(`archive ${operation} requires --plan`);
     const plan = migrationPlanFromJson(JSON.parse(readFileSync(resolve(values.plan), "utf8")) as unknown, values.root);
     if (operation === "review-template") {
@@ -175,8 +176,16 @@ function runArchiveCommand(args: string[]): void {
       console.log(JSON.stringify({ status: "ok", readOnly: true, output: resolve(values.output), pendingDecisions: template.decisions.length }, null, 2));
       return;
     }
-    if (!values.review) throw new Error("archive simulate requires --review");
+    if (!values.review) throw new Error(`archive ${operation} requires --review`);
     const review = JSON.parse(readFileSync(resolve(values.review), "utf8")) as unknown;
+    if (operation === "changeset") {
+      if (!values.output) throw new Error("archive changeset requires --output");
+      if (config.archiveRoots.some((root) => outputIsInsideArchive(values.output!, root.path))) throw new Error("change set output must be outside every configured archive root");
+      const changeSet = buildArchiveMigrationChangeSet(config, plan, review);
+      writeFileSync(resolve(values.output), `${JSON.stringify(changeSet, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+      console.log(JSON.stringify({ status: "ok", readOnly: true, output: resolve(values.output), files: changeSet.files.length, changeSetHash: changeSet.changeSetHash }, null, 2));
+      return;
+    }
     const simulation = simulateArchiveMigration(config, plan, review);
     const serialized = `${JSON.stringify({ status: "ok", simulation }, null, 2)}\n`;
     if (values.output) {

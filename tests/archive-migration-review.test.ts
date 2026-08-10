@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Config } from "../src/config.js";
 import { archiveMigrationPlanHash, planArchiveMigration } from "../src/archive-migration-plan.js";
-import { createArchiveMigrationReviewTemplate, simulateArchiveMigration } from "../src/archive-migration-review.js";
+import { buildArchiveMigrationChangeSet, createArchiveMigrationReviewTemplate, simulateArchiveMigration } from "../src/archive-migration-review.js";
 
 function fixture(): { config: Config; note: string } {
   const base = join(process.env.TMPDIR ?? "/tmp", `feather-review-${crypto.randomUUID()}`);
@@ -62,6 +62,25 @@ describe("archive migration review simulation", () => {
     expect(result).toMatchObject({ readOnly: true, summary: { ready: 1, unresolved: 0, stale: 0, invalid: 0 } });
     expect(readFileSync(note)).toEqual(before.bytes);
     expect(statSync(note, { bigint: true }).mtimeNs).toBe(before.mtime);
+  });
+
+  it("builds a deterministic hashed change set only after every decision is complete", () => {
+    const { config, note } = fixture();
+    const plan = planArchiveMigration(config, "test");
+    const review = reviewFor(plan);
+    const before = readFileSync(note);
+    const first = buildArchiveMigrationChangeSet(config, plan, review);
+    const repeated = buildArchiveMigrationChangeSet(config, plan, review);
+    expect(first).toEqual(repeated);
+    expect(first).toMatchObject({ readOnly: true, files: [{ changes: expect.arrayContaining([expect.objectContaining({ authority: "mechanical" }), expect.objectContaining({ authority: "approved", reviewer: "fixture-reviewer" })]) }] });
+    expect(first.changeSetHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(readFileSync(note)).toEqual(before);
+  });
+
+  it("refuses to create a change set while decisions remain pending", () => {
+    const { config } = fixture();
+    const plan = planArchiveMigration(config, "test");
+    expect(() => buildArchiveMigrationChangeSet(config, plan, createArchiveMigrationReviewTemplate(plan))).toThrow("requires every file to be ready");
   });
 
   it("keeps unapproved or rejected canon decisions unresolved", () => {

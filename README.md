@@ -33,6 +33,7 @@ npm run cli -- archive plan --limit 20 --output /safe/path/migration-batch.json
 npm run cli -- archive review-template --plan /private/path/plan.json --output /private/path/review.json
 npm run cli -- archive review-page --review /private/path/review.json --output /private/path/review.html
 npm run cli -- archive simulate --plan /private/path/plan.json --review /private/path/review.json --output /private/path/result.json
+npm run cli -- archive changeset --plan /private/path/plan.json --review /private/path/review.json --output /private/path/changeset.json
 npm run cli -- search "Aanu"
 npm run cli -- search --limit 5 --dedupe title "Aanu-Kathara"
 npm run cli -- show sec_ab11f1ed3840bfafc4b84c59
@@ -97,6 +98,9 @@ path, proposal, reason, source hash, or batch count changed after the template w
 `review-page` creates a self-contained offline worksheet with no external scripts, fonts, analytics,
 or network access. It includes proposal metadata but never note bodies, and downloads the edited
 review as JSON for subsequent simulation.
+`changeset` is the final read-only gate before rendering patches. It succeeds only when every file
+simulates as ready, records mechanical versus reviewed authority and review provenance for each
+field, and hashes the complete result. It contains no note bodies and does not write Markdown.
 
 A non-dry-run ingest automatically rebuilds the deterministic entity projection. `entities build`
 is also available when testing classification rules without rescanning the archive.
