@@ -18,6 +18,7 @@ import { dreamActionSchema, generateDream, operateDream } from "./dream.js";
 import { growthActionSchema, longingActionSchema, operateGrowth, operateLonging } from "./inner.js";
 import { archiveSubmissionSchema } from "./story-archive-contract.js";
 import { recordArchiveSubmission } from "./archive-transactions.js";
+import { archiveDevelopmentReport } from "./archive-ledger.js";
 
 const responseView = z.enum(["brief", "standard"]).default("brief");
 
@@ -90,6 +91,15 @@ export function buildServer(config: Config, database: FeatherDatabase) {
       transaction_id: result.transaction.transactionId,
       transaction_status: result.transaction.status,
     });
+  });
+  app.get("/v1/archive/reports/development", async (request, reply) => {
+    const parsed = z.object({ from: z.iso.datetime({ offset: true }), to: z.iso.datetime({ offset: true }) }).strict().safeParse(request.query);
+    if (!parsed.success) return reply.code(400).send({ status: "invalid_request", error: parsed.error.issues });
+    try {
+      return { status: "ok", report: archiveDevelopmentReport(database, parsed.data.from, parsed.data.to) };
+    } catch (error) {
+      return reply.code(400).send({ status: "invalid_request", error: error instanceof Error ? error.message : String(error) });
+    }
   });
   app.post("/v1/search", async (request, reply) => {
     const parsed = z.object({

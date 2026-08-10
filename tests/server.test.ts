@@ -62,7 +62,7 @@ describe("API", () => {
 
     const status = await app.inject({ method: "GET", url: "/v1/status" });
     expect(status.statusCode).toBe(200);
-    expect(status.json()).toMatchObject({ status: "not_indexed", schemaVersion: 15 });
+    expect(status.json()).toMatchObject({ status: "not_indexed", schemaVersion: 16 });
 
     const toolStatus = await app.inject({
       method: "POST",
@@ -70,7 +70,7 @@ describe("API", () => {
       payload: { operation: "status" },
     });
     expect(toolStatus.statusCode).toBe(200);
-    expect(toolStatus.json()).toMatchObject({ status: "not_indexed", schemaVersion: 15 });
+    expect(toolStatus.json()).toMatchObject({ status: "not_indexed", schemaVersion: 16 });
 
     const invalid = await app.inject({
       method: "POST",
@@ -144,6 +144,21 @@ describe("API", () => {
         content_characters: 35,
       },
     });
+  });
+
+  it("returns bounded deterministic archive development reports", async () => {
+    const database = openDatabase(":memory:");
+    migrate(database);
+    const app = buildServer(config, database);
+    resources.push(app);
+    const response = await app.inject({
+      method: "GET",
+      url: "/v1/archive/reports/development?from=2026-08-01T00%3A00%3A00Z&to=2026-09-01T00%3A00%3A00Z",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ status: "ok", report: { metrics: { events: 0, grossWordsChanged: 0 }, actions: [], categories: [], subjects: [] } });
+    const invalid = await app.inject({ method: "GET", url: "/v1/archive/reports/development?from=nope&to=also-nope" });
+    expect(invalid.statusCode).toBe(400);
   });
 
   it("rejects invalid and client-specific archive submission fields", async () => {

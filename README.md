@@ -147,7 +147,7 @@ The API binds to `127.0.0.1:8765` by default:
 Except for `/health`, API routes require `Authorization: Bearer <token>` when
 `server.authTokenFile` is configured. The VM installer creates the token with mode `0600`; Hermes
 adapters read it from `~/.config/feather-light/api-token`. Do not place the token in command-line
-arguments or logs. The current database schema is version 15 and verifies SHA-256 checksums for all
+arguments or logs. The current database schema is version 16 and verifies SHA-256 checksums for all
 applied migrations.
 
 Story Archive intake is available through two authenticated routes:
@@ -157,6 +157,11 @@ Story Archive intake is available through two authenticated routes:
   distinguishes identical retries from conflicting ID reuse.
 
 Neither route writes canonical Markdown or creates a Git commit yet.
+
+The prototype development ledger stores current note snapshots and append-only note events linked
+to archive transactions. `GET /v1/archive/reports/development?from=<ISO>&to=<ISO>` returns objective
+event, note, active-day, word-change, link-change, action, category, and subject metrics for a
+half-open time range. The ledger contains development activity and provenance, not canonical lore.
 
 ## Safety guarantees
 
