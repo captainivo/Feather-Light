@@ -147,7 +147,7 @@ The API binds to `127.0.0.1:8765` by default:
 Except for `/health`, API routes require `Authorization: Bearer <token>` when
 `server.authTokenFile` is configured. The VM installer creates the token with mode `0600`; Hermes
 adapters read it from `~/.config/feather-light/api-token`. Do not place the token in command-line
-arguments or logs. The current database schema is version 17 and verifies SHA-256 checksums for all
+arguments or logs. The current database schema is version 18 and verifies SHA-256 checksums for all
 applied migrations.
 
 Story Archive intake is available through two authenticated routes:
@@ -167,6 +167,9 @@ Archive transactions follow a guarded `pending -> processing -> succeeded|failed
 intake validation may also move `pending -> failed`. Authenticated list, detail, and transition
 routes expose bounded procedural state without returning stored source bodies. Terminal records
 retain completion time, summary, Git commit when present, and failure provenance.
+Workers claim the oldest pending transaction atomically through `POST /v1/archive/transactions/claim`;
+the operation records a bounded worker ID and processing start time, and returns `204` when the queue
+is empty. Claim responses contain transaction metadata but never the stored submission body.
 
 Development-event metrics are supplied by a deterministic Markdown diff. It excludes frontmatter
 and fenced code, treats wikilink markup as presentation rather than added prose, counts repeated

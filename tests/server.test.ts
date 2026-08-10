@@ -62,7 +62,7 @@ describe("API", () => {
 
     const status = await app.inject({ method: "GET", url: "/v1/status" });
     expect(status.statusCode).toBe(200);
-    expect(status.json()).toMatchObject({ status: "not_indexed", schemaVersion: 17 });
+    expect(status.json()).toMatchObject({ status: "not_indexed", schemaVersion: 18 });
 
     const toolStatus = await app.inject({
       method: "POST",
@@ -70,7 +70,7 @@ describe("API", () => {
       payload: { operation: "status" },
     });
     expect(toolStatus.statusCode).toBe(200);
-    expect(toolStatus.json()).toMatchObject({ status: "not_indexed", schemaVersion: 17 });
+    expect(toolStatus.json()).toMatchObject({ status: "not_indexed", schemaVersion: 18 });
 
     const invalid = await app.inject({
       method: "POST",
@@ -194,6 +194,29 @@ describe("API", () => {
       eventId: "ANE-api-001", noteId: "person-example-001", categories: [{ name: "character", role: "primary" }],
     }], next_cursor: null });
     expect(JSON.stringify(events.json())).not.toContain("stood by the tower");
+  });
+
+  it("atomically claims pending archive work without returning its source body", async () => {
+    const database = openDatabase(":memory:");
+    migrate(database);
+    const app = buildServer(config, database);
+    resources.push(app);
+    await app.inject({ method: "POST", url: "/v1/archive/submissions", payload: {
+      submission_id: "SUB-claim-api-001", mode: "archive", source_client: "n8n",
+      submitted_at: "2026-08-10T04:00:00Z", content: "Private synthetic claim payload.", requested_status: "draft",
+    } });
+    const claimed = await app.inject({ method: "POST", url: "/v1/archive/transactions/claim", payload: {
+      workerId: "n8n-main", occurredAt: "2026-08-10T04:01:00Z",
+    } });
+    expect(claimed.statusCode).toBe(200);
+    expect(claimed.json()).toMatchObject({ status: "claimed", transaction: {
+      status: "processing", claimedBy: "n8n-main", processingStartedAt: "2026-08-10T04:01:00Z",
+    } });
+    expect(JSON.stringify(claimed.json())).not.toContain("Private synthetic claim payload");
+    const empty = await app.inject({ method: "POST", url: "/v1/archive/transactions/claim", payload: {
+      workerId: "n8n-main", occurredAt: "2026-08-10T04:02:00Z",
+    } });
+    expect(empty.statusCode).toBe(204);
   });
 
   it("rejects invalid and client-specific archive submission fields", async () => {

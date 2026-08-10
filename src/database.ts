@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { createHash } from "node:crypto";
 import Database from "better-sqlite3";
 
-export const SCHEMA_VERSION = 17;
+export const SCHEMA_VERSION = 18;
 
 export type FeatherDatabase = Database.Database;
 

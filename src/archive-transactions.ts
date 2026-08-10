@@ -15,6 +15,8 @@ export interface ArchiveTransaction {
   receivedAt: string;
   requestedStatus: ArchiveSubmission["requested_status"];
   status: "pending" | "processing" | "succeeded" | "failed" | "partial";
+  claimedBy: string | null;
+  processingStartedAt: string | null;
   completedAt: string | null;
   summary: string | null;
   gitCommit: string | null;
@@ -36,6 +38,8 @@ interface TransactionRow {
   received_at: string;
   requested_status: ArchiveSubmission["requested_status"];
   status: ArchiveTransaction["status"];
+  claimed_by: string | null;
+  processing_started_at: string | null;
   completed_at: string | null;
   summary: string | null;
   git_commit: string | null;
@@ -73,6 +77,8 @@ function mapTransaction(row: TransactionRow): ArchiveTransaction {
     receivedAt: row.received_at,
     requestedStatus: row.requested_status,
     status: row.status,
+    claimedBy: row.claimed_by,
+    processingStartedAt: row.processing_started_at,
     completedAt: row.completed_at,
     summary: row.summary,
     gitCommit: row.git_commit,
@@ -106,7 +112,8 @@ export function recordArchiveSubmission(
   );
   const row = database.prepare(`
     SELECT transaction_id, submission_id, request_hash, mode, source_client,
-      submitted_at, received_at, requested_status, status, completed_at, summary, git_commit, error_summary
+      submitted_at, received_at, requested_status, status, claimed_by, processing_started_at,
+      completed_at, summary, git_commit, error_summary
     FROM archive_transactions WHERE submission_id = ?
   `).get(submission.submission_id) as TransactionRow | undefined;
   if (!row) throw new Error("archive transaction insert did not produce a readable row");
@@ -118,7 +125,8 @@ export function recordArchiveSubmission(
 }
 
 const transactionColumns = `transaction_id, submission_id, request_hash, mode, source_client,
-  submitted_at, received_at, requested_status, status, completed_at, summary, git_commit, error_summary`;
+  submitted_at, received_at, requested_status, status, claimed_by, processing_started_at,
+  completed_at, summary, git_commit, error_summary`;
 
 export function getArchiveTransaction(database: FeatherDatabase, transactionId: string): ArchiveTransaction | null {
   const row = database.prepare(`SELECT ${transactionColumns} FROM archive_transactions WHERE transaction_id = ?`).get(transactionId) as TransactionRow | undefined;
@@ -135,6 +143,29 @@ export function listArchiveTransactions(
     ? database.prepare(`SELECT ${transactionColumns} FROM archive_transactions WHERE status = ? ORDER BY received_at DESC, transaction_id DESC LIMIT ?`).all(status, limit)
     : database.prepare(`SELECT ${transactionColumns} FROM archive_transactions ORDER BY received_at DESC, transaction_id DESC LIMIT ?`).all(limit);
   return (rows as TransactionRow[]).map(mapTransaction);
+}
+
+export const archiveTransactionClaimSchema = z.object({
+  workerId: z.string().trim().min(1).max(120),
+  occurredAt: z.iso.datetime({ offset: true }),
+}).strict();
+
+export function claimNextArchiveTransaction(database: FeatherDatabase, value: unknown): ArchiveTransaction | null {
+  const claim = archiveTransactionClaimSchema.parse(value);
+  return database.transaction(() => {
+    const next = database.prepare(`
+      SELECT transaction_id FROM archive_transactions
+      WHERE status='pending' ORDER BY received_at, transaction_id LIMIT 1
+    `).get() as { transaction_id: string } | undefined;
+    if (!next) return null;
+    const result = database.prepare(`
+      UPDATE archive_transactions
+      SET status='processing', claimed_by=?, processing_started_at=?
+      WHERE transaction_id=? AND status='pending'
+    `).run(claim.workerId, claim.occurredAt, next.transaction_id);
+    if (result.changes !== 1) throw new Error("archive transaction claim changed concurrently");
+    return getArchiveTransaction(database, next.transaction_id)!;
+  })();
 }
 
 export const archiveTransactionTransitionSchema = z.object({
@@ -162,10 +193,13 @@ export function transitionArchiveTransaction(database: FeatherDatabase, transact
   if (!allowed.has(transition.status)) throw new Error(`invalid archive transaction transition: ${current.status} -> ${transition.status}`);
   const terminal = transition.status !== "processing";
   const result = database.prepare(`
-    UPDATE archive_transactions SET status=?, completed_at=?, summary=?, git_commit=?, error_summary=?
+    UPDATE archive_transactions SET status=?, processing_started_at=CASE WHEN ?='processing' THEN ? ELSE processing_started_at END,
+      completed_at=?, summary=?, git_commit=?, error_summary=?
     WHERE transaction_id=? AND status=?
   `).run(
     transition.status,
+    transition.status,
+    transition.occurredAt,
     terminal ? transition.occurredAt : null,
     transition.summary ?? null,
     transition.gitCommit ?? null,

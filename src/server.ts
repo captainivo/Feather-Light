@@ -17,7 +17,7 @@ import { indexStatus } from "./status.js";
 import { dreamActionSchema, generateDream, operateDream } from "./dream.js";
 import { growthActionSchema, longingActionSchema, operateGrowth, operateLonging } from "./inner.js";
 import { archiveSubmissionSchema } from "./story-archive-contract.js";
-import { archiveTransactionStatuses, getArchiveTransaction, listArchiveTransactions, recordArchiveSubmission, transitionArchiveTransaction } from "./archive-transactions.js";
+import { archiveTransactionStatuses, claimNextArchiveTransaction, getArchiveTransaction, listArchiveTransactions, recordArchiveSubmission, transitionArchiveTransaction } from "./archive-transactions.js";
 import { archiveDevelopmentReport, listArchiveTransactionEvents, recordArchiveNoteChange } from "./archive-ledger.js";
 
 const responseView = z.enum(["brief", "standard"]).default("brief");
@@ -108,6 +108,17 @@ export function buildServer(config: Config, database: FeatherDatabase) {
       limit: parsed.data.limit,
       ...(parsed.data.status === undefined ? {} : { status: parsed.data.status }),
     }) };
+  });
+  app.post("/v1/archive/transactions/claim", async (request, reply) => {
+    try {
+      const transaction = claimNextArchiveTransaction(database, request.body);
+      return transaction
+        ? { status: "claimed", transaction }
+        : reply.code(204).send();
+    } catch (error) {
+      if (error instanceof z.ZodError) return reply.code(400).send({ status: "invalid_request", error: error.issues });
+      return reply.code(409).send({ status: "claim_rejected", error: error instanceof Error ? error.message : String(error) });
+    }
   });
   app.get("/v1/archive/transactions/:transactionId", async (request, reply) => {
     const parsed = z.object({ transactionId: z.string().min(1) }).strict().safeParse(request.params);

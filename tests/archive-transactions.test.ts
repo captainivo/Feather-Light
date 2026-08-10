@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { migrate, openDatabase, type FeatherDatabase } from "../src/database.js";
-import { archiveSubmissionHash, getArchiveTransaction, listArchiveTransactions, recordArchiveSubmission, transitionArchiveTransaction } from "../src/archive-transactions.js";
+import { archiveSubmissionHash, claimNextArchiveTransaction, getArchiveTransaction, listArchiveTransactions, recordArchiveSubmission, transitionArchiveTransaction } from "../src/archive-transactions.js";
 import { parseArchiveSubmission } from "../src/story-archive-contract.js";
 
 const databases: FeatherDatabase[] = [];
@@ -94,5 +94,17 @@ describe("archive transaction intake", () => {
     const listed = listArchiveTransactions(db, { status: "pending", limit: 1 });
     expect(listed).toHaveLength(1);
     expect(listed[0]).not.toHaveProperty("requestJson");
+  });
+
+  it("atomically claims each pending transaction once in arrival order", () => {
+    const db = database();
+    const first = recordArchiveSubmission(db, submission, "2026-08-10T04:01:00Z").transaction;
+    const secondSubmission = parseArchiveSubmission({ ...submission, submission_id: "SUB-2026-08-10-002" });
+    const second = recordArchiveSubmission(db, secondSubmission, "2026-08-10T04:02:00Z").transaction;
+    expect(claimNextArchiveTransaction(db, { workerId: "n8n-worker-1", occurredAt: "2026-08-10T04:03:00Z" })).toMatchObject({
+      transactionId: first.transactionId, status: "processing", claimedBy: "n8n-worker-1", processingStartedAt: "2026-08-10T04:03:00Z",
+    });
+    expect(claimNextArchiveTransaction(db, { workerId: "n8n-worker-2", occurredAt: "2026-08-10T04:04:00Z" })).toMatchObject({ transactionId: second.transactionId });
+    expect(claimNextArchiveTransaction(db, { workerId: "n8n-worker-3", occurredAt: "2026-08-10T04:05:00Z" })).toBeNull();
   });
 });
