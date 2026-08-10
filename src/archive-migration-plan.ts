@@ -123,9 +123,17 @@ function planFile(rootId: string, rootPath: string, absolutePath: string, gitRep
   else if (!Array.isArray(metadata.aliases) || !metadata.aliases.every((item) => typeof item === "string")) proposals.push({ field: "aliases", value: null, source: "manual", level: "manual", reason: "Legacy aliases value is neither text nor a text array." });
   if (!("created" in metadata)) {
     const evidence = gitRepository ? gitFirstAddEvidence(gitRepository, absolutePath) : null;
-    proposals.push(evidence
-      ? { field: "created", value: evidence.createdDate, source: `git-first-add:${evidence.commit}`, level: "review", reason: `Git author timestamp ${evidence.authoredAt} is evidence, not unquestionable canon.` }
-      : { field: "created", value: null, source: "manual", level: "manual", reason: gitRepository ? "No first-add commit was found for this path." : "The archive is not in a Git repository; filesystem times are not trusted." });
+    if (evidence) {
+      proposals.push(
+        { field: "created", value: evidence.createdDate, source: `git-first-add:${evidence.commit}`, level: "review", reason: `Git author timestamp ${evidence.authoredAt} is evidence, not unquestionable canon.` },
+        { field: "created_source", value: "git-first-add", source: `git-first-add:${evidence.commit}`, level: "mechanical", reason: "Records the provenance class for the proposed date." },
+      );
+    } else {
+      proposals.push(
+        { field: "created", value: "unknown", source: "legacy-import", level: "mechanical", reason: gitRepository ? "No first-add commit was found; no date is invented." : "The archive has no Git history; filesystem times are not trusted." },
+        { field: "created_source", value: "legacy-import", source: "legacy-import", level: "mechanical", reason: "Makes creation-date uncertainty explicit and auditable." },
+      );
+    }
   }
   const levels = new Set(proposals.map((proposal) => proposal.level));
   return {

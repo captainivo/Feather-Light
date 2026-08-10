@@ -75,6 +75,10 @@ as equivalent. When Git history exists, the planner follows renames to the first
 records its author date and commit hash as reviewable creation evidence. The planner is also
 read-only and applies the same outside-the-vault output rule.
 
+Legacy notes with no trustworthy creation evidence use the explicit pair `created: unknown` and
+`created_source: legacy-import`. This preserves uncertainty instead of substituting filesystem
+timestamps or migration dates.
+
 A non-dry-run ingest automatically rebuilds the deterministic entity projection. `entities build`
 is also available when testing classification rules without rescanning the archive.
 

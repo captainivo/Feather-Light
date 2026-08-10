@@ -42,6 +42,18 @@ describe("story archive note metadata", () => {
     expect(() => storyNoteMetadataSchema.parse({ ...note, categories: ["character", "character"] })).toThrow();
   });
 
+  it("allows explicit unknown legacy creation dates with provenance", () => {
+    expect(storyNoteMetadataSchema.parse({
+      ...note,
+      created: "unknown",
+      created_source: "legacy-import",
+    })).toMatchObject({ created: "unknown", created_source: "legacy-import" });
+  });
+
+  it("rejects unknown creation dates without legacy provenance", () => {
+    expect(() => storyNoteMetadataSchema.parse({ ...note, created: "unknown" })).toThrow(/legacy-import/);
+  });
+
   it.each(["person", "place", "event", "thing"])("validates the %s fixture", (kind) => {
     const path = resolve("tests/fixtures/story-archive", `${kind}.json`);
     expect(storyNoteMetadataSchema.parse(JSON.parse(readFileSync(path, "utf8")))).toBeDefined();

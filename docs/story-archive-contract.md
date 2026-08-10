@@ -49,6 +49,17 @@ created: 2026-08-09
 `categories`, `regions`, `eras`, and `aliases` are always arrays, including when empty. Duplicate
 values are rejected case-insensitively.
 
+New notes use an ISO creation date. A migrated legacy note whose original date cannot be established
+may instead use:
+
+```yaml
+created: unknown
+created_source: legacy-import
+```
+
+`unknown` is accepted only with that explicit provenance. When Git first-add evidence exists, the
+date is proposed for review and `created_source` is `git-first-add`.
+
 ## Normalized submission
 
 ```json

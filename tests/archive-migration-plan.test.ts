@@ -40,7 +40,8 @@ describe("Phase 0.5 migration batch planner", () => {
       expect.objectContaining({ field: "type", value: "planetary-system", level: "review" }),
       expect.objectContaining({ field: "status", value: "draft", source: "canon", level: "review" }),
       expect.objectContaining({ field: "aliases", value: ["The Black Thorin"], level: "review" }),
-      expect.objectContaining({ field: "created", value: null, level: "manual" }),
+      expect.objectContaining({ field: "created", value: "unknown", level: "mechanical" }),
+      expect.objectContaining({ field: "created_source", value: "legacy-import", level: "mechanical" }),
     ]));
     const source = plan.files.find((file) => file.relativePath.endsWith("Raw Note.md"))!;
     expect(source.proposals).toEqual(expect.arrayContaining([
@@ -78,6 +79,11 @@ describe("Phase 0.5 migration batch planner", () => {
       field: "created",
       value: "2021-04-05",
       level: "review",
+    }));
+    expect(plan.files[0]!.proposals).toContainEqual(expect.objectContaining({
+      field: "created_source",
+      value: "git-first-add",
+      level: "mechanical",
     }));
   });
 });

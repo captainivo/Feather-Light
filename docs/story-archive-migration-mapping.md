@@ -14,6 +14,8 @@ These mappings are proposals for Phase 0.5 review. They do not authorize vault w
 - Missing `title`: existing H1 or filename fallback.
 - Missing `aliases`, `regions`, or `eras` with no legacy counterpart: empty arrays.
 - Existing new-vocabulary canon statuses: preserved.
+- Missing creation evidence: `created: unknown` with `created_source: legacy-import`; no date is
+  invented.
 
 ## Review-required proposals
 
@@ -33,17 +35,18 @@ These mappings are proposals for Phase 0.5 review. They do not authorize vault w
 - `created` uses the earliest Git first-add author date when a repository history exists, follows
   renames, records the supporting commit hash, and remains review-required. Filesystem modification
   and creation times are never trusted historical facts.
-- `created` remains unset when the archive has no Git repository or no first-add evidence.
+- Git-backed dates remain review-required even when evidence exists.
 - Legacy `live` and `open` workflow statuses do not map to canon status.
 - Files outside recognized directory conventions need manual type/category classification.
 - Non-text or structurally invalid legacy values are not guessed.
 
 ## First batch baseline
 
-The first deterministic 20-file batch was generated outside the vault. All 20 currently require at
-least one manual decision, primarily because `created` lacks trustworthy evidence. Across the batch,
-the planner produced 83 mechanical, 69 review-required, and 26 manual proposals. No files changed.
+The first deterministic 20-file batch was generated outside the vault. With explicit unknown legacy
+creation dates, 17 files are review-ready and 3 still require manual classification. Across the
+batch, the planner produced 123 mechanical, 69 review-required, and 6 manual proposals. No files
+changed.
 
-The current workstation vault is not a Git repository, so all 20 first-batch creation dates remain
-manual. The resolver is ready for the future containerized canonical repository and is covered by a
-rename-history regression test.
+The current workstation vault is not a Git repository, so all 20 first-batch creation dates use
+explicit `unknown` legacy provenance. The Git resolver remains ready for the future containerized
+canonical repository and is covered by a rename-history regression test.

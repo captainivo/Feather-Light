@@ -59,7 +59,16 @@ export const storyNoteMetadataSchema = z.object({
   regions: uniqueStrings(normalizedLabel),
   eras: uniqueStrings(normalizedLabel),
   aliases: uniqueStrings(z.string().trim().min(1).max(200)),
-  created: z.iso.date(),
+  created: z.union([z.iso.date(), z.literal("unknown")]),
+  created_source: z.enum(["author-supplied", "git-first-add", "legacy-import"]).optional(),
+}).superRefine((metadata, context) => {
+  if (metadata.created === "unknown" && metadata.created_source !== "legacy-import") {
+    context.addIssue({
+      code: "custom",
+      path: ["created_source"],
+      message: "unknown creation dates require created_source: legacy-import",
+    });
+  }
 });
 
 export const archiveSubmissionSchema = z.object({
