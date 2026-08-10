@@ -213,6 +213,12 @@ describe("API", () => {
       status: "processing", claimedBy: "n8n-main", processingStartedAt: "2026-08-10T04:01:00Z",
     } });
     expect(JSON.stringify(claimed.json())).not.toContain("Private synthetic claim payload");
+    const transactionId = claimed.json().transaction.transactionId as string;
+    const rejectedWork = await app.inject({ method: "GET", url: `/v1/archive/transactions/${transactionId}/work?worker_id=n8n-other` });
+    expect(rejectedWork.statusCode).toBe(409);
+    const work = await app.inject({ method: "GET", url: `/v1/archive/transactions/${transactionId}/work?worker_id=n8n-main` });
+    expect(work.statusCode).toBe(200);
+    expect(work.json()).toMatchObject({ status: "work", request: { submission_id: "SUB-claim-api-001", content: "Private synthetic claim payload." } });
     const empty = await app.inject({ method: "POST", url: "/v1/archive/transactions/claim", payload: {
       workerId: "n8n-main", occurredAt: "2026-08-10T04:02:00Z",
     } });

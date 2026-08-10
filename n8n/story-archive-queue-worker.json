@@ -1,0 +1,114 @@
+{
+  "name": "Story Archive - Queue Worker",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [{ "field": "minutes", "minutesInterval": 1 }] } },
+      "id": "8e106108-0c75-410b-94ce-6ad33fe94b02",
+      "name": "Poll Queue",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-600, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FEATHER_LIGHT_BASE_URL + '/v1/archive/transactions/claim' }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "Authorization", "value": "={{ 'Bearer ' + $env.FEATHER_LIGHT_API_TOKEN }}" },
+          { "name": "Content-Type", "value": "application/json" }
+        ] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workerId: $env.FEATHER_LIGHT_WORKER_ID, occurredAt: $now.toISO() }) }}",
+        "options": { "response": { "response": { "fullResponse": true, "neverError": true } } }
+      },
+      "id": "206b75e5-64f4-46ee-b9f7-f1a219792bd7",
+      "name": "Claim Next Transaction",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-360, 0]
+    },
+    {
+      "parameters": { "conditions": { "options": { "caseSensitive": true, "typeValidation": "strict" }, "conditions": [
+        { "id": "6ed27322-f85a-44db-8636-5c01b4bbfe5f", "leftValue": "={{ $json.statusCode }}", "rightValue": 200, "operator": { "type": "number", "operation": "equals" } }
+      ], "combinator": "and" } },
+      "id": "bd5ef4d2-cdd0-48a5-ab31-c4a00ac8db16",
+      "name": "Transaction Claimed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-120, 0]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.FEATHER_LIGHT_BASE_URL + '/v1/archive/transactions/' + $json.body.transaction.transactionId + '/work' }}",
+        "sendQuery": true,
+        "queryParameters": { "parameters": [{ "name": "worker_id", "value": "={{ $env.FEATHER_LIGHT_WORKER_ID }}" }] },
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "={{ 'Bearer ' + $env.FEATHER_LIGHT_API_TOKEN }}" }] },
+        "options": {}
+      },
+      "id": "c9248bc1-f6c4-4520-926a-cfe8cf689ff6",
+      "name": "Fetch Claimed Work",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [120, -100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FEATHER_LIGHT_BASE_URL + '/v1/archive/validate' }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "Authorization", "value": "={{ 'Bearer ' + $env.FEATHER_LIGHT_API_TOKEN }}" },
+          { "name": "Content-Type", "value": "application/json" }
+        ] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request) }}",
+        "options": {}
+      },
+      "id": "49850ec3-00b3-45ec-bb9b-daed82f77bf3",
+      "name": "Validate Claimed Submission",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [360, -100]
+    },
+    {
+      "parameters": { "assignments": { "assignments": [
+        { "id": "60814373-095f-4cdf-81eb-77f5557c1e3a", "name": "handoff_status", "value": "ready_for_processing", "type": "string" }
+      ] }, "options": {} },
+      "id": "bcddc8ca-f3fd-4f84-8969-f3480cc8e772",
+      "name": "Ready For Processing",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [600, -100]
+    },
+    {
+      "parameters": { "assignments": { "assignments": [
+        { "id": "8fd1f7df-dd10-4dfd-9cd6-1c75223cae67", "name": "queue_status", "value": "empty", "type": "string" }
+      ] }, "options": {} },
+      "id": "2e9da65b-14f1-405b-99ee-c0ef89b67ef7",
+      "name": "No Pending Work",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [120, 120]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Poll Queue": { "main": [[{ "node": "Claim Next Transaction", "type": "main", "index": 0 }]] },
+    "Claim Next Transaction": { "main": [[{ "node": "Transaction Claimed?", "type": "main", "index": 0 }]] },
+    "Transaction Claimed?": { "main": [
+      [{ "node": "Fetch Claimed Work", "type": "main", "index": 0 }],
+      [{ "node": "No Pending Work", "type": "main", "index": 0 }]
+    ] },
+    "Fetch Claimed Work": { "main": [[{ "node": "Validate Claimed Submission", "type": "main", "index": 0 }]] },
+    "Validate Claimed Submission": { "main": [[{ "node": "Ready For Processing", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "versionId": "d3ce845c-07aa-466e-a57d-ae574204c31a",
+  "meta": { "templateCredsSetupCompleted": false },
+  "tags": []
+}

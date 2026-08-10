@@ -170,6 +170,9 @@ retain completion time, summary, Git commit when present, and failure provenance
 Workers claim the oldest pending transaction atomically through `POST /v1/archive/transactions/claim`;
 the operation records a bounded worker ID and processing start time, and returns `204` when the queue
 is empty. Claim responses contain transaction metadata but never the stored submission body.
+The authenticated claiming worker may then fetch the normalized request from
+`GET /v1/archive/transactions/:transactionId/work?worker_id=...`; other workers and non-processing
+transactions are rejected. General transaction and event endpoints remain body-free.
 
 External Obsidian changes can be classified with the deterministic reconciliation planner before
 any ledger mutation. It uses permanent frontmatter IDs and full-content hashes to distinguish

@@ -17,7 +17,7 @@ import { indexStatus } from "./status.js";
 import { dreamActionSchema, generateDream, operateDream } from "./dream.js";
 import { growthActionSchema, longingActionSchema, operateGrowth, operateLonging } from "./inner.js";
 import { archiveSubmissionSchema } from "./story-archive-contract.js";
-import { archiveTransactionStatuses, claimNextArchiveTransaction, getArchiveTransaction, listArchiveTransactions, recordArchiveSubmission, transitionArchiveTransaction } from "./archive-transactions.js";
+import { archiveTransactionStatuses, claimNextArchiveTransaction, getArchiveTransaction, getClaimedArchiveTransactionWork, listArchiveTransactions, recordArchiveSubmission, transitionArchiveTransaction } from "./archive-transactions.js";
 import { archiveDevelopmentReport, listArchiveTransactionEvents, recordArchiveNoteChange } from "./archive-ledger.js";
 
 const responseView = z.enum(["brief", "standard"]).default("brief");
@@ -125,6 +125,18 @@ export function buildServer(config: Config, database: FeatherDatabase) {
     if (!parsed.success) return reply.code(400).send({ status: "invalid_request", error: parsed.error.issues });
     const transaction = getArchiveTransaction(database, parsed.data.transactionId);
     return transaction ? { status: "ok", transaction } : reply.code(404).send({ status: "not_found" });
+  });
+  app.get("/v1/archive/transactions/:transactionId/work", async (request, reply) => {
+    const params = z.object({ transactionId: z.string().min(1) }).strict().safeParse(request.params);
+    const query = z.object({ worker_id: z.string().trim().min(1).max(120) }).strict().safeParse(request.query);
+    if (!params.success) return reply.code(400).send({ status: "invalid_request", error: params.error.issues });
+    if (!query.success) return reply.code(400).send({ status: "invalid_request", error: query.error.issues });
+    try {
+      return { status: "work", ...getClaimedArchiveTransactionWork(database, params.data.transactionId, query.data.worker_id) };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return reply.code(message.startsWith("unknown archive transaction") ? 404 : 409).send({ status: "work_rejected", error: message });
+    }
   });
   app.patch("/v1/archive/transactions/:transactionId", async (request, reply) => {
     const params = z.object({ transactionId: z.string().min(1) }).strict().safeParse(request.params);

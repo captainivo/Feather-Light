@@ -168,6 +168,30 @@ export function claimNextArchiveTransaction(database: FeatherDatabase, value: un
   })();
 }
 
+export interface ArchiveTransactionWork {
+  transaction: ArchiveTransaction;
+  request: ArchiveSubmission;
+}
+
+export function getClaimedArchiveTransactionWork(
+  database: FeatherDatabase,
+  transactionId: string,
+  workerId: string,
+): ArchiveTransactionWork {
+  const worker = z.string().trim().min(1).max(120).parse(workerId);
+  const row = database.prepare(`
+    SELECT request_json FROM archive_transactions
+    WHERE transaction_id=? AND status='processing' AND claimed_by=?
+  `).get(transactionId, worker) as { request_json: string } | undefined;
+  if (!row) {
+    const transaction = getArchiveTransaction(database, transactionId);
+    if (!transaction) throw new Error(`unknown archive transaction: ${transactionId}`);
+    if (transaction.status !== "processing") throw new Error(`archive transaction is not processing: ${transaction.status}`);
+    throw new Error("archive transaction is claimed by another worker");
+  }
+  return { transaction: getArchiveTransaction(database, transactionId)!, request: JSON.parse(row.request_json) as ArchiveSubmission };
+}
+
 export const archiveTransactionTransitionSchema = z.object({
   status: z.enum(["processing", "succeeded", "failed", "partial"]),
   occurredAt: z.iso.datetime({ offset: true }),

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { migrate, openDatabase, type FeatherDatabase } from "../src/database.js";
-import { archiveSubmissionHash, claimNextArchiveTransaction, getArchiveTransaction, listArchiveTransactions, recordArchiveSubmission, transitionArchiveTransaction } from "../src/archive-transactions.js";
+import { archiveSubmissionHash, claimNextArchiveTransaction, getArchiveTransaction, getClaimedArchiveTransactionWork, listArchiveTransactions, recordArchiveSubmission, transitionArchiveTransaction } from "../src/archive-transactions.js";
 import { parseArchiveSubmission } from "../src/story-archive-contract.js";
 
 const databases: FeatherDatabase[] = [];
@@ -106,5 +106,13 @@ describe("archive transaction intake", () => {
     });
     expect(claimNextArchiveTransaction(db, { workerId: "n8n-worker-2", occurredAt: "2026-08-10T04:04:00Z" })).toMatchObject({ transactionId: second.transactionId });
     expect(claimNextArchiveTransaction(db, { workerId: "n8n-worker-3", occurredAt: "2026-08-10T04:05:00Z" })).toBeNull();
+  });
+
+  it("releases stored source only to the worker holding the claim", () => {
+    const db = database();
+    const created = recordArchiveSubmission(db, submission).transaction;
+    claimNextArchiveTransaction(db, { workerId: "n8n-worker-1", occurredAt: "2026-08-10T04:03:00Z" });
+    expect(getClaimedArchiveTransactionWork(db, created.transactionId, "n8n-worker-1").request).toEqual(submission);
+    expect(() => getClaimedArchiveTransactionWork(db, created.transactionId, "n8n-worker-2")).toThrow("another worker");
   });
 });
