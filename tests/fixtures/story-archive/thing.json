@@ -1,0 +1,12 @@
+{
+  "id": "thing-feather-cylinder-001",
+  "title": "Feather Cylinder",
+  "type": "thing",
+  "status": "canon",
+  "primary_category": "technology",
+  "categories": ["technology", "third-civilization"],
+  "regions": [],
+  "eras": ["third-civilization"],
+  "aliases": [],
+  "created": "2026-08-09"
+}

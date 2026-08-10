@@ -1,0 +1,12 @@
+{
+  "id": "event-feather-cylinder-discovery-001",
+  "title": "Discovery of the Feather Cylinder",
+  "type": "event",
+  "status": "canon",
+  "primary_category": "history",
+  "categories": ["history", "technology"],
+  "regions": ["alphara"],
+  "eras": ["third-civilization"],
+  "aliases": [],
+  "created": "2026-08-09"
+}

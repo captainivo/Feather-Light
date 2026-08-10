@@ -1,0 +1,12 @@
+{
+  "id": "person-angus-001",
+  "title": "Angus",
+  "type": "person",
+  "status": "canon",
+  "primary_category": "character",
+  "categories": ["character", "third-civilization"],
+  "regions": ["alphara"],
+  "eras": ["third-civilization"],
+  "aliases": ["The Black Thorin"],
+  "created": "2026-08-09"
+}

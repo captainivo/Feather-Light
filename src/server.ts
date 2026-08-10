@@ -16,11 +16,15 @@ import { search, type DedupeMode } from "./search.js";
 import { indexStatus } from "./status.js";
 import { dreamActionSchema, generateDream, operateDream } from "./dream.js";
 import { growthActionSchema, longingActionSchema, operateGrowth, operateLonging } from "./inner.js";
+import { archiveSubmissionSchema } from "./story-archive-contract.js";
 
 const responseView = z.enum(["brief", "standard"]).default("brief");
 
 export function buildServer(config: Config, database: FeatherDatabase) {
-  const app = Fastify({ logger: true, bodyLimit: config.limits.responseCharacters });
+  const app = Fastify({
+    logger: true,
+    bodyLimit: Math.max(config.limits.maxFileBytes, config.limits.responseCharacters),
+  });
   const apiToken = config.server.authTokenFile ? readFileSync(config.server.authTokenFile, "utf8").trim() : null;
   if (config.server.authTokenFile && !apiToken) throw new Error("Feather-Light API token file is empty");
   app.addHook("onRequest", async (request, reply) => {
@@ -41,6 +45,29 @@ export function buildServer(config: Config, database: FeatherDatabase) {
   });
   app.get("/health", async () => ({ status: "ok", service: "feather-light", version: "0.4.0" }));
   app.get("/v1/status", async () => indexStatus(database));
+  app.post("/v1/archive/validate", async (request, reply) => {
+    const parsed = archiveSubmissionSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ status: "invalid_request", error: parsed.error.issues });
+    }
+    const submission = parsed.data;
+    return {
+      status: "valid",
+      persisted: false,
+      submission: {
+        submission_id: submission.submission_id,
+        mode: submission.mode,
+        source_client: submission.source_client,
+        submitted_at: submission.submitted_at,
+        requested_status: submission.requested_status,
+        primary_subject: submission.primary_subject ?? null,
+        targets: submission.targets,
+        categories: submission.categories,
+        metadata: submission.metadata,
+        content_characters: submission.content.length,
+      },
+    };
+  });
   app.post("/v1/search", async (request, reply) => {
     const parsed = z.object({
       query: z.string().min(1).max(500),

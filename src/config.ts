@@ -3,13 +3,26 @@ import { dirname, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 
-const localHost = z.enum(["127.0.0.1", "localhost", "::1"]);
+const loopbackHosts = ["127.0.0.1", "localhost", "::1"];
+const serviceHost = z.string().refine((value) => {
+  if (loopbackHosts.includes(value)) return true;
+  if (value === "0.0.0.0") return true;
+  return /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(value);
+}, { message: "server host must be loopback, a private LAN address, or the container wildcard" });
 
 const configSchema = z.object({
   server: z.object({
-      host: localHost.default("127.0.0.1"),
+      host: serviceHost.default("127.0.0.1"),
       port: z.number().int().min(1).max(65_535).default(8765),
       authTokenFile: z.string().min(1).optional(),
+    }).superRefine((server, context) => {
+      if (!loopbackHosts.includes(server.host) && !server.authTokenFile) {
+        context.addIssue({
+          code: "custom",
+          message: "authTokenFile is required when the server binds to a private LAN address",
+          path: ["authTokenFile"],
+        });
+      }
     })
     .default({ host: "127.0.0.1", port: 8765 }),
   database: z.object({ path: z.string().min(1).default("state/feather-light.sqlite3") }),

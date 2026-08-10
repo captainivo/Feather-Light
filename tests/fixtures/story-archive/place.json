@@ -1,0 +1,12 @@
+{
+  "id": "place-alphara-001",
+  "title": "Alphara",
+  "type": "place",
+  "status": "canon",
+  "primary_category": "geography",
+  "categories": ["geography", "place"],
+  "regions": ["alphara"],
+  "eras": [],
+  "aliases": [],
+  "created": "2026-08-09"
+}

@@ -1,0 +1,77 @@
+{
+  "name": "Story Archive - Validate Submission",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "story-archive/validate",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "d5d8cd47-6e57-45b1-a349-84eed60febcd",
+      "name": "Receive Submission",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-420, 0],
+      "webhookId": "2e8b135f-b0b7-484d-8bd9-9c2f62cbb85a"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FEATHER_LIGHT_BASE_URL + '/v1/archive/validate' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.FEATHER_LIGHT_API_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body ?? $json) }}",
+        "options": {}
+      },
+      "id": "3c691707-d42e-4f76-ab8e-a921306a04ea",
+      "name": "Validate With Feather-Light",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-140, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "66c0c25d-bb69-434f-a260-44ee5812a28c",
+      "name": "Return Validation Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [140, 0]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Receive Submission": {
+      "main": [[{"node": "Validate With Feather-Light", "type": "main", "index": 0}]]
+    },
+    "Validate With Feather-Light": {
+      "main": [[{"node": "Return Validation Result", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "50a8fa7a-54b5-44a7-b328-c293446125b8",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

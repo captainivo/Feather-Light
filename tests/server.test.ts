@@ -109,4 +109,78 @@ describe("API", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ status: "ok", result: { active_count: 0 } });
   });
+
+  it("validates archive submissions without claiming persistence", async () => {
+    const database = openDatabase(":memory:");
+    migrate(database);
+    const app = buildServer(config, database);
+    resources.push(app);
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/archive/validate",
+      payload: {
+        submission_id: "SUB-2026-08-09-004",
+        mode: "archive",
+        source_client: "n8n",
+        submitted_at: "2026-08-09T19:54:00-07:00",
+        content: "Angus carried the feather cylinder.",
+        requested_status: "canon",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      status: "valid",
+      persisted: false,
+      submission: {
+        submission_id: "SUB-2026-08-09-004",
+        mode: "archive",
+        source_client: "n8n",
+        submitted_at: "2026-08-09T19:54:00-07:00",
+        requested_status: "canon",
+        primary_subject: null,
+        targets: [],
+        categories: [],
+        metadata: {},
+        content_characters: 35,
+      },
+    });
+  });
+
+  it("rejects invalid and client-specific archive submission fields", async () => {
+    const database = openDatabase(":memory:");
+    migrate(database);
+    const app = buildServer(config, database);
+    resources.push(app);
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/archive/validate",
+      payload: {
+        submission_id: "SUB-2026-08-09-005",
+        mode: "retcon",
+        source_client: "web-ui",
+        submitted_at: "2026-08-09T19:54:00-07:00",
+        content: "Replace the earlier account.",
+        requested_status: "canon",
+        n8n_node_id: "must-not-cross-the-boundary",
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ status: "invalid_request" });
+  });
+
+  it("protects archive validation with the configured bearer token", async () => {
+    const tokenPath = `/tmp/feather-light-token-${crypto.randomUUID()}`;
+    writeFileSync(tokenPath, "archive-test-token\n", { mode: 0o600 });
+    const database = openDatabase(":memory:");
+    migrate(database);
+    const app = buildServer({ ...config, server: { ...config.server, authTokenFile: tokenPath } }, database);
+    resources.push(app);
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/archive/validate",
+      payload: {},
+    });
+    expect(response.statusCode).toBe(401);
+    unlinkSync(tokenPath);
+  });
 });
