@@ -1,0 +1,37 @@
+server:
+  host: "127.0.0.1"
+  port: 8765
+
+database:
+  path: "/var/lib/feather-light/feather-light.sqlite3"
+
+aauthora:
+  baseUrl: "http://127.0.0.1:8421"
+  timeoutMs: 2000
+
+ollama:
+  baseUrl: "http://127.0.0.1:11434"
+  model: "qwen3:4b-instruct"
+  temperature: 1.1
+  contextWindow: 4096
+  timeoutMs: 60000
+  archiveSample: 3
+
+environment:
+  timezone: "America/Vancouver"
+  masterSeed: "aauthora-canonical-seed-v1"
+  simulationStartDate: "2026-07-16"
+  startingAbsoluteDay: 1
+
+archiveRoots:
+  - rootId: "westpole-canonical"
+    displayName: "The Westpole"
+    path: "/archive/westpole"
+    readOnly: true
+    enabled: true
+
+limits:
+  maxFileBytes: 1048576
+  searchResults: 10
+  excerptCharacters: 1200
+  responseCharacters: 16000

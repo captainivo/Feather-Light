@@ -42,7 +42,7 @@ COPY --from=river-build --chown=node:node /build/river-slate/dist ./services/riv
 COPY --from=shard-build --chown=node:node /build/shard-lantern/package.json /build/shard-lantern/package-lock.json ./services/shard-lantern/
 COPY --from=shard-build --chown=node:node /build/shard-lantern/node_modules ./services/shard-lantern/node_modules
 COPY --from=shard-build --chown=node:node /build/shard-lantern/dist ./services/shard-lantern/dist
-COPY --chown=node:node deployment/container-supervisor.mjs deployment/container-healthcheck.mjs ./deployment/
+COPY --chown=node:node deployment/container-supervisor.mjs deployment/container-healthcheck.mjs deployment/config.rehearsal.yaml ./deployment/
 RUN mkdir -p /var/lib/feather-light /var/lib/river-slate/health-card /var/lib/shard-lantern \
   && chown -R node:node /var/lib/feather-light /var/lib/river-slate /var/lib/shard-lantern
 USER node

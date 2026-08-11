@@ -12,6 +12,7 @@ describe("container packaging", () => {
     expect(dockerfile).toContain("services/river-slate");
     expect(dockerfile).toContain("services/shard-lantern");
     expect(dockerfile).toContain("container-supervisor.mjs");
+    expect(dockerfile).toContain("config.rehearsal.yaml");
   });
 
   it("mounts canon read-only and drops container capabilities", () => {
@@ -58,5 +59,17 @@ describe("container packaging", () => {
     expect(ignored).toContain("config.yaml");
     expect(ignored).toContain("The Westpole");
     expect(ignored).toContain("story-archive-migration-*.json");
+  });
+
+  it("keeps the rehearsal API unauthenticated only on container loopback", () => {
+    const rehearsal = parse(readFileSync("deployment/config.rehearsal.yaml", "utf8")) as {
+      server: { host: string; authTokenFile?: string };
+      archiveRoots: Array<{ path: string; readOnly: boolean }>;
+    };
+    expect(rehearsal.server.host).toBe("127.0.0.1");
+    expect(rehearsal.server.authTokenFile).toBeUndefined();
+    expect(rehearsal.archiveRoots).toEqual([
+      expect.objectContaining({ path: "/archive/westpole", readOnly: true }),
+    ]);
   });
 });

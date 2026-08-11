@@ -53,3 +53,12 @@ VM. Overrides are restricted to loopback and RFC 1918 private-LAN addresses. The
 Aauthora listener is loopback-only, so it must be deliberately bridged or migrated before features
 that still depend on it can pass a cutover rehearsal. This dependency must not be exposed broadly
 to the LAN merely to make the container reachable.
+
+## Unraid rehearsal
+
+The image includes `deployment/config.rehearsal.yaml` solely for an isolated first boot. It binds
+Granite-Wing to container loopback without authentication, publishes no host port, and permits the
+container health check to verify Granite-Wing, River-Slate, and Shard-Lantern together. Canon may be
+mounted read-only during this rehearsal, but no ingest or migration is triggered automatically.
+Production exposure must use `config.container.yaml` with a separately mounted token file; the
+rehearsal config must never be paired with a published port.
