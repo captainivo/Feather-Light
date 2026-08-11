@@ -49,10 +49,15 @@ been migrated.
 
 Granite-Wing and River-Slate accept `AUTHORA_API_BASE_URL`, and Granite-Wing accepts
 `OLLAMA_BASE_URL`, so container deployments do not accidentally treat their own loopback as the
-VM. Overrides are restricted to loopback and RFC 1918 private-LAN addresses. The current Mithra
-Aauthora listener is loopback-only, so it must be deliberately bridged or migrated before features
-that still depend on it can pass a cutover rehearsal. This dependency must not be exposed broadly
-to the LAN merely to make the container reachable.
+VM. Overrides are restricted to loopback and RFC 1918 private-LAN addresses. The production
+Compose stack reaches Mithra's loopback-only Aauthora listener through an SSH sidecar. Its dedicated
+authorized key permits forwarding only to `127.0.0.1:8421`; it permits no shell, PTY, agent
+forwarding, X11 forwarding, or other destination. The forwarded port exists only on the private
+Compose network and is never published on the LAN.
+
+The tunnel key and pinned `known_hosts` file are private deployment inputs. They must remain outside
+Git and be mounted read-only through `AAUTHORA_TUNNEL_KEY_FILE` and
+`AAUTHORA_TUNNEL_KNOWN_HOSTS_FILE`.
 
 ## Unraid rehearsal
 

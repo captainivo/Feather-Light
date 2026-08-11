@@ -32,6 +32,10 @@ ENV NODE_ENV=production \
     SHARD_LANTERN_DB=/var/lib/shard-lantern/shard-lantern.sqlite3 \
     GRANITE_WING_URL=http://127.0.0.1:8765
 WORKDIR /app
+USER root
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssh-client \
+  && rm -rf /var/lib/apt/lists/*
 COPY --from=granite-build --chown=node:node /build/granite-wing/package.json /build/granite-wing/package-lock.json ./granite-wing/
 COPY --from=granite-build --chown=node:node /build/granite-wing/node_modules ./granite-wing/node_modules
 COPY --from=granite-build --chown=node:node /build/granite-wing/dist ./granite-wing/dist
