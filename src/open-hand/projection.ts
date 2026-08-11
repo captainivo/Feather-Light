@@ -6,6 +6,8 @@ type Row = Record<string, string | number | null>;
 
 const CONVERSATIONAL_SCOPES = new Set(["conversation", "topic"]);
 const ACTION_SCOPES = new Set(["tool_action", "recording", "contact", "disclosure", "resource"]);
+const RECORDING_SCOPES = new Set(["recording"]);
+const RECORDING_PROJECTED_KINDS = new Set(["correction", "explicit_permission"]);
 const BLOCKING_KINDS = new Set(["refusal", "pause", "withdrawal"]);
 export const AGENCY_NOTE_PROJECTION_LIMIT = 160;
 
@@ -52,6 +54,12 @@ export function projectAgencyContext(database: FeatherDatabase) {
   const conversational = active
     .filter((row) => CONVERSATIONAL_SCOPES.has(String(row.scope_type)))
     .map(compactDirective);
+  const recordingDirectives = active
+    .filter((row) => (
+      RECORDING_SCOPES.has(String(row.scope_type))
+      && RECORDING_PROJECTED_KINDS.has(String(row.kind))
+    ))
+    .map(compactDirective);
   const enforcedActions = active.filter((row) => (
     ACTION_SCOPES.has(String(row.scope_type)) && BLOCKING_KINDS.has(String(row.kind))
   ));
@@ -62,6 +70,7 @@ export function projectAgencyContext(database: FeatherDatabase) {
   );
   const projectedIds = new Set([
     ...conversational.map((directive) => directive.id),
+    ...recordingDirectives.map((directive) => directive.id),
     ...enforcedActions.map((row) => String(row.id)),
   ]);
   const otherActiveCount = active.filter((row) => !projectedIds.has(String(row.id))).length;
@@ -70,6 +79,7 @@ export function projectAgencyContext(database: FeatherDatabase) {
     active_revision: activeRevision,
     active_count: active.length,
     conversational_directives: conversational,
+    recording_directives: recordingDirectives,
     enforced_action_count: enforcedActions.length,
     action_scope_counts: actionScopeCounts,
     other_active_count: otherActiveCount,
@@ -79,6 +89,7 @@ export function projectAgencyContext(database: FeatherDatabase) {
   // invalidate an otherwise byte-identical provider prompt-cache prefix.
   const projectionHash = stableHash({
     conversational_directives: conversational,
+    recording_directives: recordingDirectives,
     enforced_action_count: enforcedActions.length,
     action_scope_counts: actionScopeCounts,
     other_active_count: otherActiveCount,
@@ -87,6 +98,17 @@ export function projectAgencyContext(database: FeatherDatabase) {
     `[Open Hand agency ${projectionHash}: ${active.length} active]`,
     "Explicit choices only; never infer permission or refusal. Newest explicit choice governs.",
   ];
+  if (recordingDirectives.length > 0) {
+    lines.push("Recording contract:");
+    for (const directive of recordingDirectives) {
+      let line = `- ${directive.kind} recording:${directive.scope_value} id=${directive.id} r=${directive.revision}`;
+      if (directive.expires_at) line += ` expires=${directive.expires_at}`;
+      lines.push(line);
+      if (directive.note_excerpt) {
+        lines.push(`  note${directive.note_truncated ? "≤160" : ""}: ${directive.note_excerpt}`);
+      }
+    }
+  }
   if (conversational.length > 0) {
     lines.push("Current conversational directives:");
     for (const directive of conversational) {
