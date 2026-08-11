@@ -119,6 +119,15 @@ a terminal transaction, or altered approval provenance is rejected. Approval rec
 it does not write Markdown or claim a Git commit. The later apply boundary must re-check this exact
 hash and the source hash before any canonical write.
 
+The restricted writer core performs that later check. It accepts explicit authorization containing
+the transaction, claiming worker, exact approved proposal hash, and event time. It validates the
+complete note frontmatter against approved metadata, rejects path escapes and symlinks, checks the
+expected source hash, refuses targets with uncommitted changes, installs content through a
+same-directory temporary file, and creates a path-scoped commit in the archive's local private Git
+repository. Only after that commit does it record the note event and complete the transaction. If
+Git succeeds but ledger finalization fails, it preserves the committed archive and moves the
+transaction to `partial` for reconciliation instead of silently rewriting history.
+
 ## Existing-vault migration audit
 
 `npm run cli -- archive audit` performs the Phase 0.5 read-only scan. For each Markdown file it
