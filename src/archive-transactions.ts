@@ -148,15 +148,17 @@ export function listArchiveTransactions(
 export const archiveTransactionClaimSchema = z.object({
   workerId: z.string().trim().min(1).max(120),
   occurredAt: z.iso.datetime({ offset: true }),
+  modes: z.array(z.enum(["capture", "develop", "archive", "update", "retcon", "discard", "lookup", "report"])).min(1).max(8).optional(),
 }).strict();
 
 export function claimNextArchiveTransaction(database: FeatherDatabase, value: unknown): ArchiveTransaction | null {
   const claim = archiveTransactionClaimSchema.parse(value);
   return database.transaction(() => {
+    const modeClause = claim.modes ? ` AND mode IN (${claim.modes.map(() => "?").join(",")})` : "";
     const next = database.prepare(`
       SELECT transaction_id FROM archive_transactions
-      WHERE status='pending' ORDER BY received_at, transaction_id LIMIT 1
-    `).get() as { transaction_id: string } | undefined;
+      WHERE status='pending'${modeClause} ORDER BY received_at, transaction_id LIMIT 1
+    `).get(...(claim.modes ?? [])) as { transaction_id: string } | undefined;
     if (!next) return null;
     const result = database.prepare(`
       UPDATE archive_transactions

@@ -108,6 +108,19 @@ describe("archive transaction intake", () => {
     expect(claimNextArchiveTransaction(db, { workerId: "n8n-worker-3", occurredAt: "2026-08-10T04:05:00Z" })).toBeNull();
   });
 
+  it("claims only explicitly supported modes without consuming other pending work", () => {
+    const db = openDatabase(":memory:");
+    migrate(db);
+    recordArchiveSubmission(db, parseArchiveSubmission({ submission_id: "claim-mode-capture", mode: "capture", source_client: "test",
+      submitted_at: "2026-08-11T20:00:00Z", content: "Capture.", requested_status: "draft" }), "2026-08-11T20:00:00Z");
+    const archived = recordArchiveSubmission(db, parseArchiveSubmission({ submission_id: "claim-mode-archive", mode: "archive", source_client: "test",
+      submitted_at: "2026-08-11T20:01:00Z", content: "Archive.", requested_status: "draft" }), "2026-08-11T20:01:00Z");
+    expect(claimNextArchiveTransaction(db, {
+      workerId: "archive-only", occurredAt: "2026-08-11T20:02:00Z", modes: ["archive"],
+    })?.transactionId).toBe(archived.transaction.transactionId);
+    expect(listArchiveTransactions(db, { status: "pending" })).toHaveLength(1);
+  });
+
   it("releases stored source only to the worker holding the claim", () => {
     const db = database();
     const created = recordArchiveSubmission(db, submission).transaction;

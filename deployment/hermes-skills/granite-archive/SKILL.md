@@ -32,16 +32,19 @@ Read [references/submission-contract.md](references/submission-contract.md) befo
 1. Preserve the author's wording and distinguish stated fact from inference.
 2. Resolve existing permanent IDs with `feather_light` before `update`, `retcon`, or `discard`.
 3. Ask only questions whose answers could change identity, canon status, target IDs, or meaning.
-4. Show a compact proposal containing mode, requested status, subject, targets, categories, and the
-   exact content to preserve. Obtain explicit author approval before submission.
-5. Write only the normalized JSON request to a temporary file with owner-only permissions. Do not
+4. For a new `archive` note, resolve and show the permanent ID, note type, primary and secondary
+   categories, relative Markdown path, regions, eras, aliases, requested status, subject, and exact
+   content. Put that approved identity in `metadata.archive_note`; n8n must not infer it.
+5. Show a compact intake proposal containing mode, requested status, subject, targets, categories,
+   and the exact content to preserve. Obtain explicit author approval before submission.
+6. Write only the normalized JSON request to a temporary file with owner-only permissions. Do not
    place story content or credentials in shell arguments, logs, chat summaries, or Git.
-6. Run `scripts/archivectl validate REQUEST.json`. If it succeeds, run
+7. Run `scripts/archivectl validate REQUEST.json`. If it succeeds, run
    `scripts/archivectl submit REQUEST.json`.
-7. Report the returned `transaction_id` and `transaction_status`. Say "queued" or "accepted", never
+8. Report the returned `transaction_id` and `transaction_status`. Say "queued" or "accepted", never
    "archived", until the transaction reaches `succeeded` and the result identifies the committed
    note and Git revision.
-8. Delete the temporary request file after submission unless the author asks to retain it locally.
+9. Delete the temporary request file after submission unless the author asks to retain it locally.
 
 If validation, authentication, or n8n fails, stop and report the exact bounded error. Never bypass
 the n8n intake by editing the Westpole vault, SQLite ledger, or Git repository directly.

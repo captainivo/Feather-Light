@@ -20,7 +20,7 @@
         ] },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ workerId: $env.FEATHER_LIGHT_WORKER_ID, occurredAt: $now.toISO() }) }}",
+        "jsonBody": "={{ JSON.stringify({ workerId: $env.FEATHER_LIGHT_WORKER_ID, occurredAt: $now.toISO(), modes: ['archive'] }) }}",
         "options": { "response": { "response": { "fullResponse": true, "neverError": true } } }
       },
       "id": "206b75e5-64f4-46ee-b9f7-f1a219792bd7",
@@ -85,14 +85,36 @@
       "position": [600, -100]
     },
     {
-      "parameters": { "assignments": { "assignments": [
-        { "id": "60814373-095f-4cdf-81eb-77f5557c1e3a", "name": "handoff_status", "value": "ready_for_processing", "type": "string" }
-      ] }, "options": {} },
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FEATHER_LIGHT_BASE_URL + '/v1/archive/transactions/' + $('Claim Next Transaction').item.json.body.transaction.transactionId + '/proposal/derive-new' }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "Authorization", "value": "={{ 'Bearer ' + $env.FEATHER_LIGHT_API_TOKEN }}" },
+          { "name": "Content-Type", "value": "application/json" }
+        ] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ workerId: $env.FEATHER_LIGHT_WORKER_ID, preparedAt: $now.toISO(), rootId: 'westpole-canonical' }) }}",
+        "options": {}
+      },
       "id": "bcddc8ca-f3fd-4f84-8969-f3480cc8e772",
-      "name": "Ready For Processing",
+      "name": "Prepare Exact New Note Proposal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [840, -180]
+    },
+    {
+      "parameters": { "assignments": { "assignments": [
+        { "id": "a9be1773-0f65-42cb-a720-80d6b8205855", "name": "handoff_status", "value": "awaiting_exact_author_approval", "type": "string" },
+        { "id": "84704973-b66e-49ea-a1cb-2d1902c8ae52", "name": "proposal_hash", "value": "={{ $json.proposalHash }}", "type": "string" },
+        { "id": "8944a687-ea37-40c1-a4a7-3a01f40e1b21", "name": "transaction_id", "value": "={{ $json.proposal.transactionId }}", "type": "string" }
+      ] }, "options": {} },
+      "id": "48ef3da3-3cfb-465d-93ac-f0743da78dfb",
+      "name": "Await Exact Author Approval",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [840, -180]
+      "position": [1080, -180]
     },
     {
       "parameters": {
@@ -136,9 +158,10 @@
     "Fetch Claimed Work": { "main": [[{ "node": "Validate Claimed Submission", "type": "main", "index": 0 }]] },
     "Validate Claimed Submission": { "main": [[{ "node": "Submission Valid?", "type": "main", "index": 0 }]] },
     "Submission Valid?": { "main": [
-      [{ "node": "Ready For Processing", "type": "main", "index": 0 }],
+      [{ "node": "Prepare Exact New Note Proposal", "type": "main", "index": 0 }],
       [{ "node": "Mark Validation Failed", "type": "main", "index": 0 }]
-    ] }
+    ] },
+    "Prepare Exact New Note Proposal": { "main": [[{ "node": "Await Exact Author Approval", "type": "main", "index": 0 }]] }
   },
   "active": false,
   "settings": { "executionOrder": "v1" },

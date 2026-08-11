@@ -18,6 +18,7 @@ import { dreamActionSchema, generateDream, operateDream } from "./dream.js";
 import { growthActionSchema, longingActionSchema, operateGrowth, operateLonging } from "./inner.js";
 import { archiveSubmissionSchema } from "./story-archive-contract.js";
 import { archiveTransactionStatuses, claimNextArchiveTransaction, getArchiveTransaction, getClaimedArchiveTransactionWork, listArchiveTransactions, recordArchiveSubmission, transitionArchiveTransaction } from "./archive-transactions.js";
+import { deriveNewArchiveProposal } from "./archive-proposal-derive.js";
 import { archiveDevelopmentReport, listArchiveTransactionEvents, recordArchiveNoteChange } from "./archive-ledger.js";
 import { approveArchiveTransactionProposal, getArchiveTransactionProposal, prepareArchiveTransactionProposal } from "./archive-proposals.js";
 
@@ -145,6 +146,17 @@ export function buildServer(config: Config, database: FeatherDatabase) {
     try {
       const proposal = prepareArchiveTransactionProposal(database, params.data.transactionId, request.body);
       return reply.code(201).send({ status: "prepared", ...proposal });
+    } catch (error) {
+      if (error instanceof z.ZodError) return reply.code(400).send({ status: "invalid_request", error: error.issues });
+      const message = error instanceof Error ? error.message : String(error);
+      return reply.code(message.startsWith("unknown archive transaction") ? 404 : 409).send({ status: "proposal_rejected", error: message });
+    }
+  });
+  app.post("/v1/archive/transactions/:transactionId/proposal/derive-new", async (request, reply) => {
+    const params = z.object({ transactionId: z.string().min(1) }).strict().safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ status: "invalid_request", error: params.error.issues });
+    try {
+      return reply.code(201).send({ status: "prepared", ...deriveNewArchiveProposal(database, params.data.transactionId, request.body) });
     } catch (error) {
       if (error instanceof z.ZodError) return reply.code(400).send({ status: "invalid_request", error: error.issues });
       const message = error instanceof Error ? error.message : String(error);

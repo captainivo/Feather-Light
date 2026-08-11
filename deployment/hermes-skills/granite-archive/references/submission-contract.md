@@ -13,7 +13,18 @@ Send one strict JSON object with these fields:
   "primary_subject": "Optional display name",
   "targets": [],
   "categories": [],
-  "metadata": {}
+  "metadata": {
+    "archive_note": {
+      "id": "person-example-001",
+      "type": "person",
+      "primary_category": "character",
+      "secondary_categories": [],
+      "relative_path": "Characters/Example.md",
+      "regions": [],
+      "eras": [],
+      "aliases": []
+    }
+  }
 }
 ```
 
@@ -28,3 +39,8 @@ safe, while reusing an ID for different content is rejected.
 
 The client validates locally before contacting n8n, but Feather-Light performs authoritative
 validation and durable idempotency checks.
+
+New `archive` submissions require `primary_subject` plus the complete `metadata.archive_note`
+object shown above. These fields are part of the author-reviewed proposal intent; n8n must never
+invent them. Feather-Light renders the exact Markdown and proposal hash after the worker claim, and
+that exact result requires a separate author approval before any writer can commit it.
