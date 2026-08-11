@@ -89,5 +89,10 @@ describe("versioned n8n workflows", () => {
     expect(raw).not.toMatch(/Bearer [A-Za-z0-9_-]{12,}/);
     expect(workflow.connections).not.toHaveProperty("Return Exact Proposal");
     expect(workflow.connections).not.toHaveProperty("Return Approval Result");
+    for (const name of ["Fetch Exact Proposal", "Approve Exact Hash"]) {
+      expect(workflow.nodes.find((node) => node.name === name)?.parameters).toMatchObject({
+        options: { response: { response: { fullResponse: true, neverError: true } } },
+      });
+    }
   });
 });

@@ -32,7 +32,7 @@
         "url": "={{ $env.FEATHER_LIGHT_BASE_URL + '/v1/archive/transactions/' + $json.body.transaction_id + '/proposal' }}",
         "sendHeaders": true,
         "headerParameters": { "parameters": [{ "name": "Authorization", "value": "={{ 'Bearer ' + $env.FEATHER_LIGHT_API_TOKEN }}" }] },
-        "options": {}
+        "options": { "response": { "response": { "fullResponse": true, "neverError": true } } }
       },
       "id": "5d67b642-aa28-470d-919c-0bdbcbdf8ac3",
       "name": "Fetch Exact Proposal",
@@ -70,7 +70,7 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ proposalHash: $json.body.proposal_hash, approvedBy: $json.body.approved_by, approvedAt: $now.toISO() }) }}",
-        "options": {}
+        "options": { "response": { "response": { "fullResponse": true, "neverError": true } } }
       },
       "id": "c13b2f07-285d-436b-b336-82d5ab666f19",
       "name": "Approve Exact Hash",
