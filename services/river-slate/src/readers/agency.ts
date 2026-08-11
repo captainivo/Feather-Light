@@ -10,6 +10,12 @@ export interface RepairSummary {
   applied: number;
 }
 
+export interface MemoryProvenanceHealth {
+  total: number;
+  by_class: Record<string, number>;
+  suppressed: number;
+}
+
 interface KindRow {
   kind: string;
   n: number;
@@ -44,5 +50,20 @@ export function openHandRepairs(db: FeatherDatabase): RepairSummary {
     else if (row.status === "applied") applied += row.n;
   }
   return { pending, applied };
+}
+
+export function memoryProvenanceHealth(db: FeatherDatabase): MemoryProvenanceHealth {
+  const total = (db.prepare("SELECT COUNT(*) AS n FROM memory_provenance").get() as { n: number }).n;
+  const byClass: Record<string, number> = {};
+  const classRows = db
+    .prepare(
+      "SELECT provenance_class AS c, COUNT(*) AS n FROM memory_provenance WHERE suppress_flag=0 GROUP BY provenance_class",
+    )
+    .all() as Array<{ c: string; n: number }>;
+  for (const row of classRows) byClass[row.c] = row.n;
+  const suppressed = (db.prepare(
+    "SELECT COUNT(*) AS n FROM memory_provenance WHERE suppress_flag=1",
+  ).get() as { n: number }).n;
+  return { total, by_class: byClass, suppressed };
 }
 

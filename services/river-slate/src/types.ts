@@ -62,5 +62,10 @@ export interface AgencyDigest {
     pending: number;
     applied: number;
   };
+  memory_provenance: {
+    total: number;
+    by_class: Record<string, number>;
+    suppressed: number;
+  };
 }
 

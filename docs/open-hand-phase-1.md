@@ -174,3 +174,20 @@ Each milestone is independently testable and reversible; no milestone ever delet
 Confirm the four WS-A–WS-F decisions above, then implement **M0** (projection change) first —
 it is small, testable, and immediately makes the existing recording directive visible in
 projected context.
+
+## 9. Implementation status (2026-08-11)
+
+All workstreams are implemented and merged on `main`:
+
+- **M0** (`bfff511`): recording corrections/explicit permissions project into a
+  "Recording contract" block with a bounded note; included in the projection hash.
+- **M1–M4** (`a105f5d`): schema 21 `memory_provenance` ledger; `evaluateMemoryAdmission`
+  classify-or-refuse gate; native Open Hand repair adapters (`suppress_retrieval`,
+  `correct_objective_error`, `change_interpretation`, `supersede`, `retract`; delete stays
+  unsupported); `reconcileDerivedRecords` reconciliation to defeat Honcho self-healing.
+- **M5** (this commit): River-Slate agency digest surfaces `memory_provenance` health
+  (total, by_class, suppressed) alongside directives and repairs.
+
+Remaining deployment step: migrate the live Feather-Light state database (currently at a
+stale schema) to schema 21 so the ledger and health surfacing become active in the running
+system.
