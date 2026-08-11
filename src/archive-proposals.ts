@@ -65,6 +65,9 @@ export interface ArchiveTransactionProposal {
   preparedAt: string;
   approvedBy: string | null;
   approvedAt: string | null;
+  writerClaimedBy: string | null;
+  writerClaimedAt: string | null;
+  writerLeaseUntil: string | null;
 }
 
 function canonicalize(value: unknown): unknown {
@@ -84,6 +87,7 @@ export function archiveProposalHash(proposal: ArchiveProposalCore): string {
 interface ProposalRow {
   proposal_hash: string; proposal_json: string; prepared_by: string; prepared_at: string;
   approved_by: string | null; approved_at: string | null;
+  writer_claimed_by: string | null; writer_claimed_at: string | null; writer_lease_until: string | null;
 }
 
 function mapProposal(row: ProposalRow): ArchiveTransactionProposal {
@@ -94,11 +98,15 @@ function mapProposal(row: ProposalRow): ArchiveTransactionProposal {
     preparedAt: row.prepared_at,
     approvedBy: row.approved_by,
     approvedAt: row.approved_at,
+    writerClaimedBy: row.writer_claimed_by,
+    writerClaimedAt: row.writer_claimed_at,
+    writerLeaseUntil: row.writer_lease_until,
   };
 }
 
 export function getArchiveTransactionProposal(database: FeatherDatabase, transactionId: string): ArchiveTransactionProposal | null {
-  const row = database.prepare(`SELECT proposal_hash, proposal_json, prepared_by, prepared_at, approved_by, approved_at
+  const row = database.prepare(`SELECT proposal_hash, proposal_json, prepared_by, prepared_at, approved_by, approved_at,
+      writer_claimed_by, writer_claimed_at, writer_lease_until
     FROM archive_transaction_proposals WHERE transaction_id=?`).get(transactionId) as ProposalRow | undefined;
   return row ? mapProposal(row) : null;
 }

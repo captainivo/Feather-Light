@@ -9,6 +9,7 @@ import { recordArchiveNoteChange } from "./archive-ledger.js";
 import { sha256 } from "./hash.js";
 import { parseMarkdown } from "./markdown.js";
 import { storyNoteMetadataSchema } from "./story-archive-contract.js";
+import { assertArchiveWriterLease } from "./archive-writer-queue.js";
 
 export interface ArchiveWriteAuthorization {
   allowWrite: true;
@@ -55,11 +56,10 @@ export function applyApprovedArchiveProposal(
   if (!authorization.allowWrite) throw new Error("explicit archive write authorization is required");
   const transaction = getArchiveTransaction(database, authorization.transactionId);
   if (!transaction) throw new Error(`unknown archive transaction: ${authorization.transactionId}`);
-  if (transaction.status !== "processing" || transaction.claimedBy !== authorization.workerId) {
-    throw new Error("archive write requires the claiming worker and a processing transaction");
-  }
+  if (transaction.status !== "processing") throw new Error("archive write requires a processing transaction");
   const stored = getArchiveTransactionProposal(database, authorization.transactionId);
   if (!stored || !stored.approvedAt || !stored.approvedBy) throw new Error("archive proposal is not approved");
+  assertArchiveWriterLease(database, authorization.transactionId, authorization.workerId, authorization.occurredAt);
   if (stored.proposalHash !== authorization.proposalHash) throw new Error("write authorization hash does not match approved proposal");
   const { proposal } = stored;
   const root = config.archiveRoots.find((candidate) => candidate.enabled && candidate.rootId === proposal.rootId);

@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import { approveArchiveTransactionProposal, prepareArchiveTransactionProposal } from "../src/archive-proposals.js";
 import { applyApprovedArchiveProposal } from "../src/archive-writer.js";
+import { claimNextApprovedArchiveProposal } from "../src/archive-writer-queue.js";
 import { claimNextArchiveTransaction, getArchiveTransaction, recordArchiveSubmission } from "../src/archive-transactions.js";
 import { migrate, openDatabase } from "../src/database.js";
 import { parseArchiveSubmission } from "../src/story-archive-contract.js";
@@ -51,9 +52,12 @@ describe("approved archive writer", () => {
     approveArchiveTransactionProposal(state.database, state.transactionId, {
       proposalHash: state.prepared.proposalHash, approvedBy: "captain-ivo", approvedAt: "2026-08-10T19:03:00Z",
     });
+    claimNextApprovedArchiveProposal(state.database, {
+      workerId: "archive-writer-1", occurredAt: "2026-08-10T19:03:30Z", leaseSeconds: 300,
+    });
     const result = applyApprovedArchiveProposal(state.database, state.config, {
       allowWrite: true, transactionId: state.transactionId, proposalHash: state.prepared.proposalHash,
-      workerId: "n8n-main", occurredAt: "2026-08-10T19:04:00Z",
+      workerId: "archive-writer-1", occurredAt: "2026-08-10T19:04:00Z",
     });
     expect(readFileSync(join(state.root, "Characters/Example.md"), "utf8")).toBe(state.content);
     expect(result).toMatchObject({ status: "succeeded", noteId: "person-example-001", targetHash: sha256(state.content) });
