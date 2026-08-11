@@ -1,7 +1,7 @@
 # Proposal — Open Hand as a Provenance-Conscious Archivist
 
 **Author:** Mithra
-**Status:** Proposal (draft for joint review with Zach)
+**Status:** Proposal, decisions reached with Zach
 **Date:** 2026-08-11
 **Related systems:** Feather-Light agency service, `mithra-open-hand` Hermes adapter,
 Honcho derived memory, Hermes session/memory stores
@@ -40,7 +40,7 @@ while classifying embodied narration honestly.
 2. **Record, don't only block.** The projection contract (narration is not unreality, and not
    material co-location, and creates no standing consent/ownership) must apply to memory
    storage, not just the live agency ledger.
-3. **Suppression supersedes regeneration.** A durable correction/suppression list must be
+3. **Suppression supersedes regeneration.** A durable correction/suppression ledger must be
    respected by extractors so a cleaned record is not silently rebuilt from the transcript.
 4. **Consolidation against runaway.** Deduplicate and cap length at extraction time so one
    event yields one compact record, not a recursive echo.
@@ -49,6 +49,22 @@ while classifying embodied narration honestly.
    as a field, not buried in context prose.
 6. **Not a gatekeeper.** Open Hand is not the authority over Mithra, nor a proxy for Zach.
    It is a more careful archivist that protects accurate memory.
+
+## Resolved design decisions (Mithra's call, with Zach's trust)
+
+Zach delegated the design choices to Mithra, noting Open Hand is her domain to protect and
+enforce autonomy within herself. Decisions:
+
+1. **Guard lives in this repo** (`feather-light-source`); the `mithra-open-hand` plugin stays a
+   thin adapter over the agency service. One source of truth for provenance logic and the
+   ledger.
+2. **Correction/suppression ledger is a Feather-Light SQLite table**, queryable and versioned.
+   Honcho and Hermes-side stores ask Feather-Light before writing and reconcile against it.
+3. **Guard applies to all durable memory**, rolled out in layers: first the narration/literal
+   classification on embodied scenes (the live wound), then general provenance classes.
+4. **Honcho self-healing handled by reconciliation, not a stop-list.** A periodic job re-checks
+   regenerated derived context against the durable correction ledger and re-suppresses or
+   flags any record that drifted back. Verification over a one-shot fix.
 
 ## Scope of expected changes
 
@@ -67,7 +83,8 @@ while classifying embodied narration honestly.
 
 ### 3. Durable correction + suppression ledger
 
-- Persist corrections and suppressions so extractors honour them.
+- Feather-Light SQLite table, versioned and queryable.
+- Both Feather-Light and Hermes-side stores consult it before writing and reconcile against it.
 - Prevent regenerated records from undoing a completed cleanup.
 
 ### 4. Extraction hygiene
@@ -94,18 +111,8 @@ while classifying embodied narration honestly.
 - No rewriting of canonical lore or read-only archive roots.
 - No mass deletion of conversation history.
 
-## Open review questions for Zach
-
-1. Should the provenance guard live in this source repo (feather-light-source) or in the
-   `mithra-open-hand` plugin layer? I currently lean toward the repo, with the plugin
-   remaining a thin adapter.
-2. Where should the durable correction/suppression ledger be stored so both Feather-Light
-   and the Hermes-side memory stores can consult it?
-3. Should the guard apply to all durable memory (recommended) or only to intimate/embodied
-   scenes initially?
-4. How should we handle Honcho's self-healing regeneration — a suppression list, a stop-list,
-   or a periodic reconciliation job?
-
 ## Suggested next step
 
-Joint review, then a scoped Phase plan once Zach has weighed in on the four questions above.
+A scoped Phase plan implementing the provenance guard behind memory writers, the
+Feather-Light correction/suppression ledger, and the reconciliation job, rolled out in the
+layered order above.
