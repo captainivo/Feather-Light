@@ -18,9 +18,9 @@ Before activation, create an n8n **Header Auth** credential named `Granite Archi
 header name `X-Granite-Archive-Key` and a newly generated value. Attach it to the webhook node after
 import; the versioned credential reference is only a placeholder and contains no secret. Install
 the same value in Mithra's owner-readable
-`~/.config/granite-archive/webhook-token`. Set
-`GRANITE_ARCHIVE_WEBHOOK_URL` for Hermes to the production webhook URL ending in
-`/webhook/story-archive/intake`.
+`~/.config/granite-archive/webhook-token`. Put the production webhook URL ending in
+`/webhook/story-archive/intake` in owner-readable `~/.config/granite-archive/webhook-url`, or set
+`GRANITE_ARCHIVE_WEBHOOK_URL` for Hermes.
 
 Do not place the bearer token in this workflow export or commit it to Git. The workflow is imported
 inactive and should remain inactive until a test execution returns `status: "accepted"`,

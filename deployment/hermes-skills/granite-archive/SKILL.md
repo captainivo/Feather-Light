@@ -49,6 +49,8 @@ the n8n intake by editing the Westpole vault, SQLite ledger, or Git repository d
 ## Secret boundary
 
 The client reads its webhook key from `GRANITE_ARCHIVE_TOKEN_FILE` (default:
-`~/.config/granite-archive/webhook-token`). Never print, copy into notes, or commit this key. The
+`~/.config/granite-archive/webhook-token`) and its endpoint from `GRANITE_ARCHIVE_WEBHOOK_URL` or
+the default `~/.config/granite-archive/webhook-url` file. Never print, copy either value into notes,
+or commit the key. The
 public key fingerprint used for Mithra's source-maintenance checkout is unrelated and cannot
 authenticate archive submissions.

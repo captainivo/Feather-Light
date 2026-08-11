@@ -62,10 +62,19 @@ def token() -> str:
     return value
 
 
+def webhook_url() -> str:
+    configured = os.environ.get("GRANITE_ARCHIVE_WEBHOOK_URL", "").strip()
+    if configured:
+        return configured
+    path = Path(os.environ.get("GRANITE_ARCHIVE_WEBHOOK_URL_FILE", "~/.config/granite-archive/webhook-url")).expanduser()
+    value = path.read_text(encoding="utf-8").strip()
+    if not value:
+        fail(f"webhook URL file is empty: {path}")
+    return value
+
+
 def submit(value: dict) -> dict:
-    endpoint = os.environ.get("GRANITE_ARCHIVE_WEBHOOK_URL", "").strip()
-    if not endpoint:
-        fail("GRANITE_ARCHIVE_WEBHOOK_URL is not configured")
+    endpoint = webhook_url()
     request = Request(
         endpoint,
         data=json.dumps(value, separators=(",", ":")).encode("utf-8"),
