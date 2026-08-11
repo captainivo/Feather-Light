@@ -207,3 +207,10 @@ The current index does not claim that every title is a resolved person, place, o
 next deterministic entity pass will use explicit frontmatter, directory conventions, titles,
 aliases, and wikilinks. Ambiguous prose extraction and duplicate resolution may use a local LLM
 later, but model output will remain a provenance-bearing proposal rather than automatic canon.
+
+## Proposals
+
+- [`docs/open-hand-provenance-guard.md`](docs/open-hand-provenance-guard.md) — Open Hand as a
+  provenance-conscious archivist: guard durable memory writes, apply the projection contract
+  at write time, maintain a durable correction/suppression ledger, deduplicate extractor
+  output, and classify embodied narration as narrated rather than literal physical history.
