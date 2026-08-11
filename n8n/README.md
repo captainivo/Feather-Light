@@ -14,9 +14,20 @@ The n8n runtime must provide these secrets/configuration values:
 - `FEATHER_LIGHT_BASE_URL`, such as `http://feather-light:8765` on a Docker network;
 - `FEATHER_LIGHT_API_TOKEN`, supplied through the container secret/environment configuration.
 
+Before activation, create an n8n **Header Auth** credential named `Granite Archive Intake` with
+header name `X-Granite-Archive-Key` and a newly generated value. Attach it to the webhook node after
+import; the versioned credential reference is only a placeholder and contains no secret. Install
+the same value in Mithra's owner-readable
+`~/.config/granite-archive/webhook-token`. Set
+`GRANITE_ARCHIVE_WEBHOOK_URL` for Hermes to the production webhook URL ending in
+`/webhook/story-archive/intake`.
+
 Do not place the bearer token in this workflow export or commit it to Git. The workflow is imported
 inactive and should remain inactive until a test execution returns `status: "accepted"`,
 `persisted: true`, and `transaction_status: "pending"`.
+
+The production webhook is authenticated independently from the Feather-Light bearer token. Do not
+reuse either token or expose the n8n editor outside the trusted network.
 
 ## Queue worker
 

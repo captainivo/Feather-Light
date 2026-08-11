@@ -9,6 +9,7 @@ STATE_DIR="/home/mithra/.hermes/mithra/feather-light/state"
 PLUGIN_DIR="/home/mithra/.hermes/plugins/feather-light"
 OPEN_HAND_PLUGIN_DIR="/home/mithra/.hermes/plugins/mithra-open-hand"
 CONTEXT_PLUGIN_DIR="/home/mithra/.hermes/plugins/mithra-context-telemetry"
+ARCHIVE_SKILL_DIR="/home/mithra/.hermes/skills/granite-archive"
 SYSTEMD_DIR="/home/mithra/.config/systemd/user"
 HERMES_PY="/home/mithra/.hermes/hermes-agent/venv/bin/python"
 TOKEN_FILE="$CONFIG_DIR/api-token"
@@ -32,7 +33,7 @@ npm run check
 npm test
 npm run build
 
-install -d -m 0750 "$CONFIG_DIR" "$STATE_DIR" "$PLUGIN_DIR" "$OPEN_HAND_PLUGIN_DIR" "$SYSTEMD_DIR"
+install -d -m 0750 "$CONFIG_DIR" "$STATE_DIR" "$PLUGIN_DIR" "$OPEN_HAND_PLUGIN_DIR" "$ARCHIVE_SKILL_DIR" "$SYSTEMD_DIR"
 if [[ ! -f "$TOKEN_FILE" ]]; then
   umask 077
   od -An -N32 -tx1 /dev/urandom | tr -d ' \n' > "$TOKEN_FILE"
@@ -56,6 +57,11 @@ install -m 0644 deployment/hermes-plugin/plugin.yaml "$PLUGIN_DIR/plugin.yaml"
 install -m 0644 deployment/hermes-plugin/__init__.py "$PLUGIN_DIR/__init__.py"
 install -m 0644 deployment/mithra-open-hand/plugin.yaml "$OPEN_HAND_PLUGIN_DIR/plugin.yaml"
 install -m 0644 deployment/mithra-open-hand/__init__.py "$OPEN_HAND_PLUGIN_DIR/__init__.py"
+install -m 0644 deployment/hermes-skills/granite-archive/SKILL.md "$ARCHIVE_SKILL_DIR/SKILL.md"
+install -d -m 0750 "$ARCHIVE_SKILL_DIR/references" "$ARCHIVE_SKILL_DIR/scripts"
+install -m 0644 deployment/hermes-skills/granite-archive/references/archive-policy.md "$ARCHIVE_SKILL_DIR/references/archive-policy.md"
+install -m 0644 deployment/hermes-skills/granite-archive/references/submission-contract.md "$ARCHIVE_SKILL_DIR/references/submission-contract.md"
+install -m 0755 deployment/hermes-skills/granite-archive/scripts/archivectl "$ARCHIVE_SKILL_DIR/scripts/archivectl"
 
 if [[ -d "$CONTEXT_PLUGIN_DIR" ]]; then
   install -m 0644 deployment/hermes-compat/world_state_tool.py "$CONTEXT_PLUGIN_DIR/world_state_tool.py"

@@ -5,6 +5,7 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "story-archive/intake",
+        "authentication": "headerAuth",
         "responseMode": "responseNode",
         "options": {}
       },
@@ -13,7 +14,13 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [-420, 0],
-      "webhookId": "2e8b135f-b0b7-484d-8bd9-9c2f62cbb85a"
+      "webhookId": "2e8b135f-b0b7-484d-8bd9-9c2f62cbb85a",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "granite-archive-intake",
+          "name": "Granite Archive Intake"
+        }
+      }
     },
     {
       "parameters": {

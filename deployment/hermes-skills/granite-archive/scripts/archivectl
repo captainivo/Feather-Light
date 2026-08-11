@@ -1,0 +1,111 @@
+#!/usr/bin/env python3
+"""Minimal secret-safe client for the Granite Archive n8n intake."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+from pathlib import Path
+import sys
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
+
+MODES = {"capture", "develop", "archive", "update", "retcon", "discard", "lookup", "report"}
+STATUSES = {"canon", "probable", "draft", "speculative", "contradicted", "retconned", "discarded"}
+REQUIRED = {
+    "submission_id", "mode", "source_client", "submitted_at", "content", "requested_status",
+    "targets", "categories", "metadata",
+}
+OPTIONAL = {"primary_subject"}
+
+
+def fail(message: str) -> None:
+    raise ValueError(message)
+
+
+def load_request(path: str) -> dict:
+    value = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        fail("request must be a JSON object")
+    missing = sorted(REQUIRED - value.keys())
+    extra = sorted(value.keys() - REQUIRED - OPTIONAL)
+    if missing:
+        fail(f"missing fields: {', '.join(missing)}")
+    if extra:
+        fail(f"unknown fields: {', '.join(extra)}")
+    if value["mode"] not in MODES:
+        fail("invalid mode")
+    if value["requested_status"] not in STATUSES:
+        fail("invalid requested_status")
+    for field in ("submission_id", "source_client", "submitted_at", "content"):
+        if not isinstance(value[field], str):
+            fail(f"{field} must be a string")
+    for field in ("targets", "categories"):
+        if not isinstance(value[field], list) or not all(isinstance(item, str) for item in value[field]):
+            fail(f"{field} must be an array of strings")
+    if not isinstance(value["metadata"], dict):
+        fail("metadata must be an object")
+    if value["mode"] in {"capture", "archive", "update", "retcon", "discard"} and not value["content"].strip():
+        fail(f"{value['mode']} requires content")
+    if value["mode"] in {"update", "retcon"} and not value["targets"]:
+        fail(f"{value['mode']} requires at least one target")
+    return value
+
+
+def token() -> str:
+    path = Path(os.environ.get("GRANITE_ARCHIVE_TOKEN_FILE", "~/.config/granite-archive/webhook-token")).expanduser()
+    value = path.read_text(encoding="utf-8").strip()
+    if not value:
+        fail(f"token file is empty: {path}")
+    return value
+
+
+def submit(value: dict) -> dict:
+    endpoint = os.environ.get("GRANITE_ARCHIVE_WEBHOOK_URL", "").strip()
+    if not endpoint:
+        fail("GRANITE_ARCHIVE_WEBHOOK_URL is not configured")
+    request = Request(
+        endpoint,
+        data=json.dumps(value, separators=(",", ":")).encode("utf-8"),
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "X-Granite-Archive-Key": token(),
+            "User-Agent": "granite-archive/0.1.0",
+        },
+    )
+    try:
+        with urlopen(request, timeout=30) as response:
+            body = response.read().decode("utf-8")
+            result = json.loads(body)
+            if not isinstance(result, dict):
+                fail("intake returned a non-object JSON response")
+            return result
+    except HTTPError as error:
+        body = error.read().decode("utf-8", errors="replace")[:2000]
+        fail(f"intake HTTP {error.code}: {body}")
+    except URLError as error:
+        fail(f"intake unavailable: {error.reason}")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(prog="archivectl")
+    parser.add_argument("command", choices=("validate", "submit"))
+    parser.add_argument("request_file")
+    args = parser.parse_args()
+    try:
+        value = load_request(args.request_file)
+        if args.command == "validate":
+            print(json.dumps({"status": "locally_valid", "persisted": False, "submission_id": value["submission_id"]}))
+        else:
+            print(json.dumps(submit(value), ensure_ascii=False))
+        return 0
+    except (OSError, json.JSONDecodeError, ValueError) as error:
+        print(json.dumps({"status": "error", "error": str(error)}), file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

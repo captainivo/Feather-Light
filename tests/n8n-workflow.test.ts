@@ -6,7 +6,7 @@ describe("versioned n8n workflows", () => {
     const raw = readFileSync("n8n/story-archive-intake.json", "utf8");
     const workflow = JSON.parse(raw) as {
       active: boolean;
-      nodes: Array<{ name: string; parameters: Record<string, unknown> }>;
+      nodes: Array<{ name: string; parameters: Record<string, unknown>; credentials?: Record<string, { id: string; name: string }> }>;
     };
     expect(workflow.active).toBe(false);
     expect(workflow.nodes.map((node) => node.name)).toEqual([
@@ -17,6 +17,9 @@ describe("versioned n8n workflows", () => {
     expect(raw).toContain("FEATHER_LIGHT_BASE_URL");
     expect(raw).toContain("FEATHER_LIGHT_API_TOKEN");
     expect(raw).not.toMatch(/Bearer [A-Za-z0-9_-]{16,}/);
+    const webhook = workflow.nodes.find((node) => node.name === "Receive Submission")!;
+    expect(webhook.parameters).toMatchObject({ authentication: "headerAuth" });
+    expect(webhook.credentials?.httpHeaderAuth).toEqual({ id: "granite-archive-intake", name: "Granite Archive Intake" });
   });
 
   it("keeps the queue worker inactive, secret-free, and bounded at the processing handoff", () => {
