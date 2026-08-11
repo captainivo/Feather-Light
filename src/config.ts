@@ -4,12 +4,14 @@ import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 
 const loopbackHosts = ["127.0.0.1", "localhost", "::1"];
+const internalServiceHosts = ["aauthora-tunnel"];
 const privateServiceUrl = z
   .string()
   .url()
   .refine((value) => {
     const hostname = new URL(value).hostname;
     if (loopbackHosts.includes(hostname)) return true;
+    if (internalServiceHosts.includes(hostname)) return true;
     return /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(hostname);
   }, { message: "service must be loopback-only or on a private LAN" });
 const serviceHost = z.string().refine((value) => {

@@ -46,6 +46,19 @@ describe("container dependency overrides", () => {
     expect(config.ollama.baseUrl).toBe("http://192.168.1.65:11434");
   });
 
+  it("allows the exact private Compose tunnel hostname", () => {
+    const config = loadConfig(configFile('server:\n  host: "127.0.0.1"'), {
+      AUTHORA_API_BASE_URL: "http://aauthora-tunnel:18421",
+    });
+    expect(config.aauthora.baseUrl).toBe("http://aauthora-tunnel:18421");
+  });
+
+  it("rejects arbitrary Compose-style hostnames", () => {
+    expect(() => loadConfig(configFile('server:\n  host: "127.0.0.1"'), {
+      AUTHORA_API_BASE_URL: "http://untrusted-service:8421",
+    })).toThrow(/private LAN/);
+  });
+
   it("rejects public dependency endpoints", () => {
     expect(() => loadConfig(configFile('server:\n  host: "127.0.0.1"'), {
       AUTHORA_API_BASE_URL: "https://example.com",
