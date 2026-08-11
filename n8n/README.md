@@ -29,6 +29,24 @@ inactive and should remain inactive until a test execution returns `status: "acc
 The production webhook is authenticated independently from the Feather-Light bearer token. Do not
 reuse either token or expose the n8n editor outside the trusted network.
 
+## Completion email
+
+`story-archive-completion-email.json` is a reusable sub-workflow for the final successful branch of
+the future canonical-write worker. It refuses to send unless the input says `transaction_status:
+"succeeded"` and includes both `note_id` and `git_revision`. The receipt contains procedural details
+only—title, permanent ID, operation, canon status, changed path, Git revision, transaction ID, and
+completion time—and never includes private story content.
+
+Before use, create an n8n **SMTP** credential named `Granite Archive Notifications`, attach it to the
+email node after import, and configure:
+
+- `ARCHIVE_NOTIFICATION_FROM`, the sender address accepted by the SMTP account;
+- `ARCHIVE_NOTIFICATION_EMAIL`, the private destination address.
+
+Keep the workflow inactive until a synthetic `succeeded` payload sends one correct test message and
+a non-success payload is rejected. The canonical worker must invoke it only after the note write,
+ledger finalization, and Git commit all succeed.
+
 ## Queue worker
 
 `story-archive-queue-worker.json` is the first portion of the archive-transaction orchestrator. It

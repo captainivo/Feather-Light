@@ -41,4 +41,27 @@ describe("versioned n8n workflows", () => {
     expect(raw).toContain("FEATHER_LIGHT_WORKER_ID");
     expect(raw).not.toMatch(/Bearer [A-Za-z0-9_-]{12,}/);
   });
+
+  it("sends procedural email only for verified completed archive writes", () => {
+    const raw = readFileSync("n8n/story-archive-completion-email.json", "utf8");
+    const workflow = JSON.parse(raw) as {
+      active: boolean;
+      nodes: Array<{ name: string; parameters: Record<string, unknown>; credentials?: Record<string, { id: string; name: string }> }>;
+      connections: Record<string, unknown>;
+    };
+    expect(workflow.active).toBe(false);
+    expect(workflow.nodes.map((node) => node.name)).toEqual([
+      "Receive Completed Transaction", "Verified Archive Success?", "Email Archive Receipt", "Reject Premature Notification",
+    ]);
+    const email = workflow.nodes.find((node) => node.name === "Email Archive Receipt")!;
+    expect(email.credentials?.smtp).toEqual({ id: "granite-archive-notifications", name: "Granite Archive Notifications" });
+    expect(raw).toContain("ARCHIVE_NOTIFICATION_FROM");
+    expect(raw).toContain("ARCHIVE_NOTIFICATION_EMAIL");
+    expect(raw).toContain("transaction_status");
+    expect(raw).toContain("git_revision");
+    expect(raw).toContain("private story content is not included");
+    expect(raw).not.toContain("content }}");
+    expect(raw).not.toMatch(/@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+    expect(workflow.connections).not.toHaveProperty("Email Archive Receipt");
+  });
 });
