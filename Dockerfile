@@ -34,7 +34,7 @@ ENV NODE_ENV=production \
 WORKDIR /app
 USER root
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends openssh-client \
+  && apt-get install -y --no-install-recommends git openssh-client \
   && rm -rf /var/lib/apt/lists/*
 COPY --from=granite-build --chown=node:node /build/granite-wing/package.json /build/granite-wing/package-lock.json ./granite-wing/
 COPY --from=granite-build --chown=node:node /build/granite-wing/node_modules ./granite-wing/node_modules

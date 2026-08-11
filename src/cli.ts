@@ -27,6 +27,7 @@ import { parseArchiveMigrationPlan, planArchiveMigration, type ArchiveMigrationP
 import { buildArchiveMigrationChangeSet, createArchiveMigrationReviewTemplate, simulateArchiveMigration } from "./archive-migration-review.js";
 import { renderArchiveMigrationReviewPage } from "./archive-migration-review-page.js";
 import { renderArchiveMigrationPreview } from "./archive-migration-render.js";
+import { runArchiveWriterDaemon } from "./archive-writer-daemon.js";
 
 const HELP = `Feather-Light — read-only Westpole search
 
@@ -40,6 +41,7 @@ Usage:
   npm run cli -- archive simulate --plan PLAN.json --review REVIEW.json [--output RESULT.json]
   npm run cli -- archive changeset --plan PLAN.json --review REVIEW.json --output CHANGESET.json
   npm run cli -- archive render-preview --changeset CHANGESET.json --output PREVIEW.json
+  npm run cli -- archive-writer
   npm run cli -- search [--limit N] [--dedupe MODE] <words>
   npm run cli -- show <SECTION_ID>
   npm run cli -- get [--relations N] <ENTITY_ID_OR_EXACT_NAME>
@@ -725,6 +727,16 @@ async function main(): Promise<void> {
       await app.listen({ host: config.server.host, port: config.server.port });
       closeDatabase = false;
       return;
+    } else if (command === "archive-writer") {
+      const workerId = process.env.ARCHIVE_WRITER_ID ?? "feather-light-writer-1";
+      const pollMilliseconds = positiveInteger(process.env.ARCHIVE_WRITER_POLL_MS, 5_000);
+      const leaseSeconds = positiveInteger(process.env.ARCHIVE_WRITER_LEASE_SECONDS, 300);
+      if (leaseSeconds < 15 || leaseSeconds > 3_600) throw new Error("ARCHIVE_WRITER_LEASE_SECONDS must be between 15 and 3600");
+      const controller = new AbortController();
+      process.once("SIGTERM", () => controller.abort());
+      process.once("SIGINT", () => controller.abort());
+      console.log(JSON.stringify({ component: "archive-writer", status: "online", workerId, pollMilliseconds, leaseSeconds }));
+      await runArchiveWriterDaemon(database, config, { workerId, pollMilliseconds, leaseSeconds }, controller.signal);
     } else {
       throw new Error(`unknown command: ${command}\n\n${HELP}`);
     }

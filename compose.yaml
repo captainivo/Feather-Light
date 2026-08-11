@@ -92,6 +92,41 @@ services:
     cap_drop:
       - ALL
 
+  archive-writer:
+    build:
+      context: .
+      target: runtime
+    image: feather-light:${FEATHER_LIGHT_IMAGE_TAG:-local}
+    restart: unless-stopped
+    init: true
+    command: ["node", "/app/granite-wing/dist/src/cli.js", "archive-writer"]
+    network_mode: "none"
+    environment:
+      NODE_ENV: production
+      FEATHER_LIGHT_CONFIG: /etc/feather-light/config.yaml
+      FEATHER_LIGHT_DB: /var/lib/feather-light/feather-light.sqlite3
+      ARCHIVE_WRITER_ID: ${ARCHIVE_WRITER_ID:-feather-light-writer-1}
+      ARCHIVE_WRITER_POLL_MS: ${ARCHIVE_WRITER_POLL_MS:-5000}
+      ARCHIVE_WRITER_LEASE_SECONDS: ${ARCHIVE_WRITER_LEASE_SECONDS:-300}
+    volumes:
+      - feather-light-state:/var/lib/feather-light
+      - type: bind
+        source: ./deployment/config.container.yaml
+        target: /etc/feather-light/config.yaml
+        read_only: true
+      - type: bind
+        source: ${WESTPOLE_ARCHIVE_PATH:?Set WESTPOLE_ARCHIVE_PATH}
+        target: /archive/westpole
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    healthcheck:
+      disable: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
 volumes:
   feather-light-state:
   river-slate-state:

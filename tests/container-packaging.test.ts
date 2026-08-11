@@ -43,6 +43,25 @@ describe("container packaging", () => {
     expect(readFileSync("compose.yaml", "utf8")).toContain("AUTHORA_API_BASE_URL");
   });
 
+  it("isolates the only archive writer without network access", () => {
+    const compose = parse(readFileSync("compose.yaml", "utf8")) as { services: Record<string, Record<string, unknown>> };
+    const writer = compose.services["archive-writer"] as {
+      network_mode: string; read_only: boolean; command: string[];
+      volumes: Array<string | Record<string, unknown>>; cap_drop: string[];
+    };
+    expect(writer.network_mode).toBe("none");
+    expect(writer.read_only).toBe(true);
+    expect(writer.command).toContain("archive-writer");
+    expect(writer.cap_drop).toContain("ALL");
+    const writerArchive = writer.volumes.find((volume) => typeof volume === "object" && volume.target === "/archive/westpole");
+    expect(writerArchive).toBeDefined();
+    expect(writerArchive).not.toHaveProperty("read_only", true);
+    const mainArchive = (compose.services["feather-light"] as { volumes: Array<Record<string, unknown>> }).volumes;
+    expect(mainArchive).toEqual(expect.arrayContaining([
+      expect.objectContaining({ target: "/archive/westpole", read_only: true }),
+    ]));
+  });
+
   it("supervises and health-checks every packaged process without private seed data", () => {
     const supervisor = readFileSync("deployment/container-supervisor.mjs", "utf8");
     const healthcheck = readFileSync("deployment/container-healthcheck.mjs", "utf8");

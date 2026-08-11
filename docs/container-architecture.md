@@ -67,3 +67,16 @@ container health check to verify Granite-Wing, River-Slate, and Shard-Lantern to
 mounted read-only during this rehearsal, but no ingest or migration is triggered automatically.
 Production exposure must use `config.container.yaml` with a separately mounted token file; the
 rehearsal config must never be paired with a published port.
+
+## Restricted archive writer
+
+Approved canon changes are applied by a separate `archive-writer` service. It shares only the
+Feather-Light ledger volume, the production configuration, and a read-write Westpole bind mount.
+It publishes no ports and runs with Docker networking disabled, a read-only container filesystem,
+all capabilities dropped, and `no-new-privileges`. The main `feather-light` service retains its
+read-only Westpole mount.
+
+The host archive must grant the image's unprivileged `node` user (UID 1000 by default) write access.
+Do not solve a permission problem by running the writer as root. An approved proposal is leased to
+one writer for a bounded interval before the exact proposal hash can be committed locally to the
+private archive Git repository.
