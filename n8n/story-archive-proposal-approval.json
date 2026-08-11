@@ -1,0 +1,117 @@
+{
+  "name": "Story Archive - Proposal Review and Approval",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "story-archive/proposal",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "0db0be8d-21b4-4d45-a6d5-9d38ca5f27a1",
+      "name": "Receive Proposal Action",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-600, 0],
+      "webhookId": "9dd7f0ea-a731-4a49-826e-c16dd48c302c",
+      "credentials": { "httpHeaderAuth": { "id": "granite-archive-intake", "name": "Granite Archive Intake" } }
+    },
+    {
+      "parameters": { "conditions": { "options": { "caseSensitive": true, "typeValidation": "strict" }, "conditions": [
+        { "id": "b1e304e5-e938-4a70-8934-dc0e8183640e", "leftValue": "={{ $json.body.action }}", "rightValue": "review", "operator": { "type": "string", "operation": "equals" } }
+      ], "combinator": "and" } },
+      "id": "7ee2345f-ec68-4716-a702-79a6233e3eef",
+      "name": "Review Requested?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-360, 0]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.FEATHER_LIGHT_BASE_URL + '/v1/archive/transactions/' + $json.body.transaction_id + '/proposal' }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "={{ 'Bearer ' + $env.FEATHER_LIGHT_API_TOKEN }}" }] },
+        "options": {}
+      },
+      "id": "5d67b642-aa28-470d-919c-0bdbcbdf8ac3",
+      "name": "Fetch Exact Proposal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-120, -140]
+    },
+    {
+      "parameters": { "respondWith": "json", "responseBody": "={{ JSON.stringify($json) }}", "options": {} },
+      "id": "5f81810b-7911-48d8-a827-b63e0a0120af",
+      "name": "Return Exact Proposal",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [120, -140]
+    },
+    {
+      "parameters": { "conditions": { "options": { "caseSensitive": true, "typeValidation": "strict" }, "conditions": [
+        { "id": "f335baec-5d3d-4ce4-8590-789973d946a6", "leftValue": "={{ $json.body.action }}", "rightValue": "approve", "operator": { "type": "string", "operation": "equals" } }
+      ], "combinator": "and" } },
+      "id": "06dbdc80-3ad6-480e-9501-948123bc66cc",
+      "name": "Approval Requested?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-120, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FEATHER_LIGHT_BASE_URL + '/v1/archive/transactions/' + $json.body.transaction_id + '/proposal/approve' }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "Authorization", "value": "={{ 'Bearer ' + $env.FEATHER_LIGHT_API_TOKEN }}" },
+          { "name": "Content-Type", "value": "application/json" }
+        ] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ proposalHash: $json.body.proposal_hash, approvedBy: $json.body.approved_by, approvedAt: $now.toISO() }) }}",
+        "options": {}
+      },
+      "id": "c13b2f07-285d-436b-b336-82d5ab666f19",
+      "name": "Approve Exact Hash",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [120, 40]
+    },
+    {
+      "parameters": { "respondWith": "json", "responseBody": "={{ JSON.stringify($json) }}", "options": {} },
+      "id": "23e9fc26-60e9-413e-9653-ae1cd6cb197a",
+      "name": "Return Approval Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [360, 40]
+    },
+    {
+      "parameters": { "respondWith": "json", "responseBody": "={{ JSON.stringify({ status: 'invalid_action', error: 'action must be review or approve' }) }}", "options": { "responseCode": 400 } },
+      "id": "781f541f-cbab-4b85-8dab-53dc289b25cb",
+      "name": "Reject Invalid Action",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [120, 200]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Receive Proposal Action": { "main": [[{ "node": "Review Requested?", "type": "main", "index": 0 }]] },
+    "Review Requested?": { "main": [
+      [{ "node": "Fetch Exact Proposal", "type": "main", "index": 0 }],
+      [{ "node": "Approval Requested?", "type": "main", "index": 0 }]
+    ] },
+    "Fetch Exact Proposal": { "main": [[{ "node": "Return Exact Proposal", "type": "main", "index": 0 }]] },
+    "Approval Requested?": { "main": [
+      [{ "node": "Approve Exact Hash", "type": "main", "index": 0 }],
+      [{ "node": "Reject Invalid Action", "type": "main", "index": 0 }]
+    ] },
+    "Approve Exact Hash": { "main": [[{ "node": "Return Approval Result", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "versionId": "8303019e-33f1-46da-a9ea-663c44844875",
+  "meta": { "templateCredsSetupCompleted": false },
+  "tags": []
+}

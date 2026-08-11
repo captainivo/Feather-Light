@@ -29,6 +29,14 @@ inactive and should remain inactive until a test execution returns `status: "acc
 The production webhook is authenticated independently from the Feather-Light bearer token. Do not
 reuse either token or expose the n8n editor outside the trusted network.
 
+## Proposal review and approval
+
+`story-archive-proposal-approval.json` exposes the separately versioned POST webhook
+`/webhook/story-archive/proposal`. It reuses the `Granite Archive Intake` Header Auth credential.
+The `review` action returns the immutable stored proposal; the `approve` action forwards the exact
+transaction ID, proposal hash, author identity, and server-generated approval time. A mismatched
+hash is rejected by Feather-Light. This workflow never edits Markdown and cannot change a proposal.
+
 ## Completion email
 
 `story-archive-completion-email.json` is a reusable sub-workflow for the final successful branch of

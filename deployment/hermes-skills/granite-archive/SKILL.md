@@ -46,6 +46,14 @@ Read [references/submission-contract.md](references/submission-contract.md) befo
    note and Git revision.
 9. Delete the temporary request file after submission unless the author asks to retain it locally.
 
+## Exact proposal approval
+
+After n8n prepares a proposal, run `scripts/archivectl review TRANSACTION_ID` and show the author
+the complete returned note content, relative path, operation, canon status, and `proposalHash`.
+Never summarize away a difference before approval. Only after the author explicitly approves that
+exact displayed proposal, run `scripts/archivectl approve TRANSACTION_ID PROPOSAL_HASH`. If the hash
+or transaction differs, stop. Approval means the restricted writer may commit immediately.
+
 If validation, authentication, or n8n fails, stop and report the exact bounded error. Never bypass
 the n8n intake by editing the Westpole vault, SQLite ledger, or Git repository directly.
 

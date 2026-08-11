@@ -67,4 +67,27 @@ describe("versioned n8n workflows", () => {
     expect(raw).not.toMatch(/@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
     expect(workflow.connections).not.toHaveProperty("Email Archive Receipt");
   });
+
+  it("keeps exact proposal review and approval behind authenticated n8n intake", () => {
+    const raw = readFileSync("n8n/story-archive-proposal-approval.json", "utf8");
+    const workflow = JSON.parse(raw) as {
+      active: boolean;
+      nodes: Array<{ name: string; parameters: Record<string, unknown>; credentials?: Record<string, { id: string; name: string }> }>;
+      connections: Record<string, unknown>;
+    };
+    expect(workflow.active).toBe(false);
+    expect(workflow.nodes.map((node) => node.name)).toEqual([
+      "Receive Proposal Action", "Review Requested?", "Fetch Exact Proposal", "Return Exact Proposal",
+      "Approval Requested?", "Approve Exact Hash", "Return Approval Result", "Reject Invalid Action",
+    ]);
+    const webhook = workflow.nodes.find((node) => node.name === "Receive Proposal Action")!;
+    expect(webhook.parameters).toMatchObject({ authentication: "headerAuth", path: "story-archive/proposal" });
+    expect(webhook.credentials?.httpHeaderAuth).toEqual({ id: "granite-archive-intake", name: "Granite Archive Intake" });
+    expect(raw).toContain("proposal_hash");
+    expect(raw).toContain("approved_by");
+    expect(raw).toContain("FEATHER_LIGHT_API_TOKEN");
+    expect(raw).not.toMatch(/Bearer [A-Za-z0-9_-]{12,}/);
+    expect(workflow.connections).not.toHaveProperty("Return Exact Proposal");
+    expect(workflow.connections).not.toHaveProperty("Return Approval Result");
+  });
 });

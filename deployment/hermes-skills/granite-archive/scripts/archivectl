@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Minimal secret-safe client for the Granite Archive n8n intake."""
+"""Secret-safe client for Granite Archive intake and exact proposal approval."""
 
 from __future__ import annotations
 
@@ -73,6 +73,16 @@ def webhook_url() -> str:
     return value
 
 
+def proposal_url() -> str:
+    configured = os.environ.get("GRANITE_ARCHIVE_PROPOSAL_URL", "").strip()
+    if configured:
+        return configured
+    intake = webhook_url()
+    if not intake.endswith("/story-archive/intake"):
+        fail("set GRANITE_ARCHIVE_PROPOSAL_URL when the intake URL is non-standard")
+    return intake.removesuffix("/story-archive/intake") + "/story-archive/proposal"
+
+
 def submit(value: dict) -> dict:
     endpoint = webhook_url()
     request = Request(
@@ -99,17 +109,58 @@ def submit(value: dict) -> dict:
         fail(f"intake unavailable: {error.reason}")
 
 
+def proposal_action(value: dict) -> dict:
+    request = Request(
+        proposal_url(),
+        data=json.dumps(value, separators=(",", ":")).encode("utf-8"),
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "X-Granite-Archive-Key": token(),
+            "User-Agent": "granite-archive/0.2.0",
+        },
+    )
+    try:
+        with urlopen(request, timeout=30) as response:
+            result = json.loads(response.read().decode("utf-8"))
+            if not isinstance(result, dict):
+                fail("proposal endpoint returned a non-object JSON response")
+            return result
+    except HTTPError as error:
+        body = error.read().decode("utf-8", errors="replace")[:2000]
+        fail(f"proposal HTTP {error.code}: {body}")
+    except URLError as error:
+        fail(f"proposal endpoint unavailable: {error.reason}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(prog="archivectl")
-    parser.add_argument("command", choices=("validate", "submit"))
-    parser.add_argument("request_file")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    for command in ("validate", "submit"):
+        request_parser = subparsers.add_parser(command)
+        request_parser.add_argument("request_file")
+    review_parser = subparsers.add_parser("review")
+    review_parser.add_argument("transaction_id")
+    approve_parser = subparsers.add_parser("approve")
+    approve_parser.add_argument("transaction_id")
+    approve_parser.add_argument("proposal_hash")
+    approve_parser.add_argument("--approved-by", default="captain-ivo")
     args = parser.parse_args()
     try:
-        value = load_request(args.request_file)
-        if args.command == "validate":
-            print(json.dumps({"status": "locally_valid", "persisted": False, "submission_id": value["submission_id"]}))
+        if args.command in {"validate", "submit"}:
+            value = load_request(args.request_file)
+            result = {"status": "locally_valid", "persisted": False, "submission_id": value["submission_id"]} \
+                if args.command == "validate" else submit(value)
+        elif args.command == "review":
+            result = proposal_action({"action": "review", "transaction_id": args.transaction_id})
         else:
-            print(json.dumps(submit(value), ensure_ascii=False))
+            if len(args.proposal_hash) != 64 or any(character not in "0123456789abcdef" for character in args.proposal_hash):
+                fail("proposal_hash must be 64 lowercase hexadecimal characters")
+            result = proposal_action({
+                "action": "approve", "transaction_id": args.transaction_id,
+                "proposal_hash": args.proposal_hash, "approved_by": args.approved_by,
+            })
+        print(json.dumps(result, ensure_ascii=False))
         return 0
     except (OSError, json.JSONDecodeError, ValueError) as error:
         print(json.dumps({"status": "error", "error": str(error)}), file=sys.stderr)

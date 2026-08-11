@@ -35,4 +35,11 @@ describe("granite-archive Hermes skill", () => {
     const output = JSON.parse(execFileSync(client, ["validate", request], { encoding: "utf8" })) as Record<string, unknown>;
     expect(output).toEqual({ status: "locally_valid", persisted: false, submission_id: "mithra-test-001" });
   });
+
+  it("rejects a malformed approval hash before reading secrets or contacting n8n", () => {
+    const client = `${root}/scripts/archivectl`;
+    chmodSync(client, 0o755);
+    expect(() => execFileSync(client, ["approve", "ATX-synthetic", "not-a-hash"], { encoding: "utf8", stdio: "pipe" }))
+      .toThrow();
+  });
 });
