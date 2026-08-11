@@ -35,3 +35,20 @@ describe("server binding configuration", () => {
     expect(() => loadConfig(configFile('server:\n  host: "0.0.0.0"'))).toThrow(/authTokenFile/);
   });
 });
+
+describe("container dependency overrides", () => {
+  it("overrides Aauthora and Ollama with private-LAN endpoints", () => {
+    const config = loadConfig(configFile('server:\n  host: "127.0.0.1"'), {
+      AUTHORA_API_BASE_URL: "http://192.168.1.65:8421",
+      OLLAMA_BASE_URL: "http://192.168.1.65:11434",
+    });
+    expect(config.aauthora.baseUrl).toBe("http://192.168.1.65:8421");
+    expect(config.ollama.baseUrl).toBe("http://192.168.1.65:11434");
+  });
+
+  it("rejects public dependency endpoints", () => {
+    expect(() => loadConfig(configFile('server:\n  host: "127.0.0.1"'), {
+      AUTHORA_API_BASE_URL: "https://example.com",
+    })).toThrow(/private LAN/);
+  });
+});

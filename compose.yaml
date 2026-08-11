@@ -13,7 +13,8 @@ services:
       FEATHER_LIGHT_CONFIG: /etc/feather-light/config.yaml
       FEATHER_LIGHT_DB: /var/lib/feather-light/feather-light.sqlite3
       HEALTH_CARD_DIR: /var/lib/river-slate/health-card
-      AUTHORA_API_BASE_URL: http://127.0.0.1:8421
+      AUTHORA_API_BASE_URL: ${AUTHORA_API_BASE_URL:-http://127.0.0.1:8421}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://127.0.0.1:11434}
       SHARD_LANTERN_DB: /var/lib/shard-lantern/shard-lantern.sqlite3
       GRANITE_WING_URL: http://127.0.0.1:8765
     volumes:

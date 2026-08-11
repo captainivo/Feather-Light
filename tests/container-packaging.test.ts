@@ -38,6 +38,8 @@ describe("container packaging", () => {
       "river-slate-state:/var/lib/river-slate",
       "shard-lantern-state:/var/lib/shard-lantern",
     ]));
+    expect(readFileSync("compose.yaml", "utf8")).toContain("OLLAMA_BASE_URL");
+    expect(readFileSync("compose.yaml", "utf8")).toContain("AUTHORA_API_BASE_URL");
   });
 
   it("supervises and health-checks every packaged process without private seed data", () => {

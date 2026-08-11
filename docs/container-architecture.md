@@ -46,3 +46,10 @@ The old Aauthora API on `8421` remains external for now because it still owns em
 outfit, and possessions. Sky-Loom's deterministic environment engine already lives in the root
 process and database; packaging it does not falsely claim those remaining responsibilities have
 been migrated.
+
+Granite-Wing and River-Slate accept `AUTHORA_API_BASE_URL`, and Granite-Wing accepts
+`OLLAMA_BASE_URL`, so container deployments do not accidentally treat their own loopback as the
+VM. Overrides are restricted to loopback and RFC 1918 private-LAN addresses. The current Mithra
+Aauthora listener is loopback-only, so it must be deliberately bridged or migrated before features
+that still depend on it can pass a cutover rehearsal. This dependency must not be exposed broadly
+to the LAN merely to make the container reachable.

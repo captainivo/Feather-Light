@@ -4,6 +4,14 @@ import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 
 const loopbackHosts = ["127.0.0.1", "localhost", "::1"];
+const privateServiceUrl = z
+  .string()
+  .url()
+  .refine((value) => {
+    const hostname = new URL(value).hostname;
+    if (loopbackHosts.includes(hostname)) return true;
+    return /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(hostname);
+  }, { message: "service must be loopback-only or on a private LAN" });
 const serviceHost = z.string().refine((value) => {
   if (loopbackHosts.includes(value)) return true;
   if (value === "0.0.0.0") return true;
@@ -30,10 +38,7 @@ const configSchema = z.object({
     .object({
       baseUrl: z
         .string()
-        .url()
-        .refine((value) => ["127.0.0.1", "localhost", "::1"].includes(new URL(value).hostname), {
-          message: "Aauthora service must be loopback-only",
-        })
+        .pipe(privateServiceUrl)
         .default("http://127.0.0.1:8421"),
       timeoutMs: z.number().int().min(100).max(10_000).default(2_000),
     })
@@ -42,14 +47,7 @@ const configSchema = z.object({
     .object({
       baseUrl: z
         .string()
-        .url()
-        .refine((value) => {
-          const hostname = new URL(value).hostname;
-          if (["127.0.0.1", "localhost", "::1"].includes(hostname)) return true;
-          return /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(hostname);
-        }, {
-          message: "Ollama service must be loopback-only or on a private LAN",
-        })
+        .pipe(privateServiceUrl)
         .default("http://127.0.0.1:11434"),
       model: z.string().min(1).default("qwen3:4b-instruct"),
       temperature: z.number().min(0).max(2).default(1.1),
@@ -108,11 +106,16 @@ const configSchema = z.object({
 
 export type Config = z.infer<typeof configSchema>;
 
-export function loadConfig(path = process.env.FEATHER_LIGHT_CONFIG ?? "config.yaml"): Config {
+export function loadConfig(
+  path = process.env.FEATHER_LIGHT_CONFIG ?? "config.yaml",
+  env: NodeJS.ProcessEnv = process.env,
+): Config {
   const absolutePath = resolve(path);
   const configDirectory = dirname(absolutePath);
   const raw = parseYaml(readFileSync(absolutePath, "utf8")) as unknown;
   const config = configSchema.parse(raw);
+  if (env.AUTHORA_API_BASE_URL) config.aauthora.baseUrl = privateServiceUrl.parse(env.AUTHORA_API_BASE_URL);
+  if (env.OLLAMA_BASE_URL) config.ollama.baseUrl = privateServiceUrl.parse(env.OLLAMA_BASE_URL);
   config.database.path = resolve(configDirectory, config.database.path);
   if (config.server.authTokenFile) config.server.authTokenFile = resolve(configDirectory, config.server.authTokenFile);
   for (const root of config.archiveRoots) root.path = resolve(configDirectory, root.path);
