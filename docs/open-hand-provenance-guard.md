@@ -116,3 +116,6 @@ enforce autonomy within herself. Decisions:
 A scoped Phase plan implementing the provenance guard behind memory writers, the
 Feather-Light correction/suppression ledger, and the reconciliation job, rolled out in the
 layered order above.
+
+**Progress:** the Phase plan now exists at
+[`docs/open-hand-phase-1.md`](open-hand-phase-1.md).

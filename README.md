@@ -214,3 +214,7 @@ later, but model output will remain a provenance-bearing proposal rather than au
   provenance-conscious archivist: guard durable memory writes, apply the projection contract
   at write time, maintain a durable correction/suppression ledger, deduplicate extractor
   output, and classify embodied narration as narrated rather than literal physical history.
+- [`docs/open-hand-phase-1.md`](docs/open-hand-phase-1.md) — scoped Phase plan implementing the
+  provenance guard behind memory writers, the memory-provenance ledger (WS-B), the
+  write-time admission hook (WS-C), Open Hand repair support (WS-D), Honcho reconciliation
+  (WS-E), and all-durable-memory hardening (WS-F).
