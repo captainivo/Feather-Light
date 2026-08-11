@@ -103,6 +103,22 @@ the original transaction with `replayed: true`. Reusing that ID with a different
 HTTP 409 with `status: "idempotency_conflict"`. Metadata object key order does not affect request
 identity.
 
+## Exact proposal review boundary
+
+After an n8n worker claims a transaction, it may prepare exactly one immutable proposal with
+`PUT /v1/archive/transactions/:transactionId/proposal`. The request identifies the claiming worker,
+preparation time, root, operation, note metadata, relative Markdown path, expected source hash (or
+`null` for a new note), and complete proposed content. Feather-Light canonicalizes the proposal and
+returns its SHA-256 `proposalHash`.
+
+`GET /v1/archive/transactions/:transactionId/proposal` returns that stored proposal for an
+authenticated author-review client. Approval uses
+`POST /v1/archive/transactions/:transactionId/proposal/approve` with the exact `proposalHash`, an
+author/reviewer slug, and approval time. A mismatched hash, a second different proposal, approval of
+a terminal transaction, or altered approval provenance is rejected. Approval records intent only;
+it does not write Markdown or claim a Git commit. The later apply boundary must re-check this exact
+hash and the source hash before any canonical write.
+
 ## Existing-vault migration audit
 
 `npm run cli -- archive audit` performs the Phase 0.5 read-only scan. For each Markdown file it

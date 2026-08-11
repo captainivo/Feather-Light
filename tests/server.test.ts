@@ -62,7 +62,7 @@ describe("API", () => {
 
     const status = await app.inject({ method: "GET", url: "/v1/status" });
     expect(status.statusCode).toBe(200);
-    expect(status.json()).toMatchObject({ status: "not_indexed", schemaVersion: 18 });
+    expect(status.json()).toMatchObject({ status: "not_indexed", schemaVersion: 19 });
 
     const toolStatus = await app.inject({
       method: "POST",
@@ -70,7 +70,7 @@ describe("API", () => {
       payload: { operation: "status" },
     });
     expect(toolStatus.statusCode).toBe(200);
-    expect(toolStatus.json()).toMatchObject({ status: "not_indexed", schemaVersion: 18 });
+    expect(toolStatus.json()).toMatchObject({ status: "not_indexed", schemaVersion: 19 });
 
     const invalid = await app.inject({
       method: "POST",
@@ -223,6 +223,39 @@ describe("API", () => {
       workerId: "n8n-main", occurredAt: "2026-08-10T04:02:00Z",
     } });
     expect(empty.statusCode).toBe(204);
+  });
+
+  it("exposes exact-hash archive proposal review routes", async () => {
+    const database = openDatabase(":memory:");
+    migrate(database);
+    const app = buildServer(config, database);
+    resources.push(app);
+    const created = await app.inject({ method: "POST", url: "/v1/archive/submissions", payload: {
+      submission_id: "SUB-proposal-api-001", mode: "archive", source_client: "mithra-hermes",
+      submitted_at: "2026-08-10T19:00:00Z", content: "Synthetic proposal body.", requested_status: "draft",
+    } });
+    const transactionId = created.json().transaction_id as string;
+    await app.inject({ method: "POST", url: "/v1/archive/transactions/claim", payload: {
+      workerId: "n8n-main", occurredAt: "2026-08-10T19:01:00Z",
+    } });
+    const prepared = await app.inject({ method: "PUT", url: `/v1/archive/transactions/${transactionId}/proposal`, payload: {
+      workerId: "n8n-main", preparedAt: "2026-08-10T19:02:00Z", proposalVersion: 1,
+      rootId: "westpole-canonical", operation: "NEW",
+      note: { id: "person-example-001", title: "Example", type: "person", status: "draft",
+        primaryCategory: "character", secondaryCategories: [], relativePath: "Characters/Example.md",
+        sourceHash: null, content: "# Example\nSynthetic proposal body.\n" },
+    } });
+    expect(prepared.statusCode).toBe(201);
+    const proposalHash = prepared.json().proposalHash as string;
+    const rejected = await app.inject({ method: "POST", url: `/v1/archive/transactions/${transactionId}/proposal/approve`, payload: {
+      proposalHash: "0".repeat(64), approvedBy: "captain-ivo", approvedAt: "2026-08-10T19:03:00Z",
+    } });
+    expect(rejected.statusCode).toBe(409);
+    const approved = await app.inject({ method: "POST", url: `/v1/archive/transactions/${transactionId}/proposal/approve`, payload: {
+      proposalHash, approvedBy: "captain-ivo", approvedAt: "2026-08-10T19:03:00Z",
+    } });
+    expect(approved.statusCode).toBe(200);
+    expect(approved.json()).toMatchObject({ status: "approved", proposalHash, approvedBy: "captain-ivo" });
   });
 
   it("rejects invalid and client-specific archive submission fields", async () => {

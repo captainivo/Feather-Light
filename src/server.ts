@@ -19,6 +19,7 @@ import { growthActionSchema, longingActionSchema, operateGrowth, operateLonging 
 import { archiveSubmissionSchema } from "./story-archive-contract.js";
 import { archiveTransactionStatuses, claimNextArchiveTransaction, getArchiveTransaction, getClaimedArchiveTransactionWork, listArchiveTransactions, recordArchiveSubmission, transitionArchiveTransaction } from "./archive-transactions.js";
 import { archiveDevelopmentReport, listArchiveTransactionEvents, recordArchiveNoteChange } from "./archive-ledger.js";
+import { approveArchiveTransactionProposal, getArchiveTransactionProposal, prepareArchiveTransactionProposal } from "./archive-proposals.js";
 
 const responseView = z.enum(["brief", "standard"]).default("brief");
 
@@ -136,6 +137,35 @@ export function buildServer(config: Config, database: FeatherDatabase) {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return reply.code(message.startsWith("unknown archive transaction") ? 404 : 409).send({ status: "work_rejected", error: message });
+    }
+  });
+  app.put("/v1/archive/transactions/:transactionId/proposal", async (request, reply) => {
+    const params = z.object({ transactionId: z.string().min(1) }).strict().safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ status: "invalid_request", error: params.error.issues });
+    try {
+      const proposal = prepareArchiveTransactionProposal(database, params.data.transactionId, request.body);
+      return reply.code(201).send({ status: "prepared", ...proposal });
+    } catch (error) {
+      if (error instanceof z.ZodError) return reply.code(400).send({ status: "invalid_request", error: error.issues });
+      const message = error instanceof Error ? error.message : String(error);
+      return reply.code(message.startsWith("unknown archive transaction") ? 404 : 409).send({ status: "proposal_rejected", error: message });
+    }
+  });
+  app.get("/v1/archive/transactions/:transactionId/proposal", async (request, reply) => {
+    const params = z.object({ transactionId: z.string().min(1) }).strict().safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ status: "invalid_request", error: params.error.issues });
+    const proposal = getArchiveTransactionProposal(database, params.data.transactionId);
+    return proposal ? { status: "ok", ...proposal } : reply.code(404).send({ status: "not_found" });
+  });
+  app.post("/v1/archive/transactions/:transactionId/proposal/approve", async (request, reply) => {
+    const params = z.object({ transactionId: z.string().min(1) }).strict().safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ status: "invalid_request", error: params.error.issues });
+    try {
+      return { status: "approved", ...approveArchiveTransactionProposal(database, params.data.transactionId, request.body) };
+    } catch (error) {
+      if (error instanceof z.ZodError) return reply.code(400).send({ status: "invalid_request", error: error.issues });
+      const message = error instanceof Error ? error.message : String(error);
+      return reply.code(message.startsWith("unknown archive proposal") ? 404 : 409).send({ status: "approval_rejected", error: message });
     }
   });
   app.patch("/v1/archive/transactions/:transactionId", async (request, reply) => {
