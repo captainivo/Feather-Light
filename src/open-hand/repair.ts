@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { FeatherDatabase } from "../database.js";
 import { activeRetrievalSuppressions } from "./suppression.js";
+import { correctMemoryProvenance, setMemorySuppression } from "../memory-provenance.js";
 
 const intents = [
   "correct_objective_error", "append_context", "change_interpretation",
@@ -10,7 +11,7 @@ const intents = [
 const storageSystems = [
   "feather_light_index", "agency_ledger", "aauthora_emotional",
   "notebook", "hermes_memory", "honcho", "hermes_session",
-  "provider", "backup", "canonical_archive",
+  "provider", "backup", "canonical_archive", "memory_provenance",
 ] as const;
 const selectorTypes = [
   "source_file_id", "relative_path", "section_id", "entity_id", "record_id", "session_id", "content_hash",
@@ -112,6 +113,20 @@ const capabilityRegistry: Record<StorageSystem, {
     authority: "Read-only canonical archive.",
     modes: { append_context: "manual", change_interpretation: "manual" },
     limits: ["Canonical source is not rewritten by Open Hand.", "Corrections belong in an authorized working layer."],
+  },
+  memory_provenance: {
+    authority: "Feather-Light memory-provenance ledger (derived record classes).",
+    modes: {
+      correct_objective_error: "native",
+      supersede: "native",
+      retract: "native",
+      suppress_retrieval: "native",
+      change_interpretation: "native",
+    },
+    limits: [
+      "Corrections reclassify or suppress derived records; they never delete source bytes.",
+      "Physical delete is not implemented for derived-memory records.",
+    ],
   },
 };
 
@@ -218,28 +233,83 @@ function apply(database: FeatherDatabase, action: Extract<RepairAction, { action
     if (!repair) throw new Error("repair not found");
     if (repair.status !== "pending") throw new Error(`repair is not pending: ${String(repair.status)}`);
     if (repair.intent !== action.confirm_intent) throw new Error("confirm_intent does not match the planned repair");
-    if (repair.capabilityMode !== "native" || repair.storageSystem !== "feather_light_index" || repair.intent !== "suppress_retrieval") {
-      throw new Error("repair has no native apply adapter");
-    }
+    const storage = String(repair.storageSystem);
+    const intent = String(repair.intent);
     const requestedSelectorType = String(repair.selectorType);
     const requestedSelectorValue = String(repair.selectorValue);
-    if (!["source_file_id", "relative_path", "section_id", "entity_id"].includes(requestedSelectorType)) {
-      throw new Error("selector is not supported for index suppression");
+    const correctionText = repair.correctionText ? String(repair.correctionText) : null;
+
+    if (storage === "feather_light_index") {
+      if (repair.capabilityMode !== "native" || intent !== "suppress_retrieval") {
+        throw new Error("repair has no native apply adapter");
+      }
+      if (!["source_file_id", "relative_path", "section_id", "entity_id"].includes(requestedSelectorType)) {
+        throw new Error("selector is not supported for index suppression");
+      }
+      const resolved = resolveSuppressionTarget(database, requestedSelectorType, requestedSelectorValue);
+      if (!resolved) throw new Error("suppression target not found");
+      const { selectorType, selectorValue } = resolved;
+      const suppressionId = randomUUID();
+      const now = new Date().toISOString();
+      database.prepare(`
+        INSERT INTO retrieval_suppressions(
+          suppression_id, repair_id, selector_type, selector_value, status, created_at
+        ) VALUES (?, ?, ?, ?, 'active', ?)
+      `).run(suppressionId, action.repair_id, selectorType, selectorValue, now);
+      const result = JSON.stringify({ suppressionId, selectorType, selectorValue, source_deleted: false });
+      database.prepare("UPDATE open_hand_repairs SET status='applied', applied_at=?, result_json=? WHERE repair_id=?")
+        .run(now, result, action.repair_id);
+      return { applied: true, source_deleted: false, repair: row(database, action.repair_id) };
     }
-    const resolved = resolveSuppressionTarget(database, requestedSelectorType, requestedSelectorValue);
-    if (!resolved) throw new Error("suppression target not found");
-    const { selectorType, selectorValue } = resolved;
-    const suppressionId = randomUUID();
-    const now = new Date().toISOString();
-    database.prepare(`
-      INSERT INTO retrieval_suppressions(
-        suppression_id, repair_id, selector_type, selector_value, status, created_at
-      ) VALUES (?, ?, ?, ?, 'active', ?)
-    `).run(suppressionId, action.repair_id, selectorType, selectorValue, now);
-    const result = JSON.stringify({ suppressionId, selectorType, selectorValue, source_deleted: false });
-    database.prepare("UPDATE open_hand_repairs SET status='applied', applied_at=?, result_json=? WHERE repair_id=?")
-      .run(now, result, action.repair_id);
-    return { applied: true, source_deleted: false, repair: row(database, action.repair_id) };
+
+    if (storage === "memory_provenance") {
+      if (repair.capabilityMode !== "native") {
+        throw new Error("repair has no native apply adapter");
+      }
+      if (requestedSelectorType !== "record_key") {
+        throw new Error("memory_provenance repairs require selector_type='record_key' with peer/record in selector_value");
+      }
+      const peer = String(repair.sourceType ?? "") === "ai" ? "ai" : "user";
+      // selector_value is the record_key; peer derived from source_type
+      const recordKey = requestedSelectorValue;
+      let result: Record<string, unknown>;
+      const now = new Date().toISOString();
+      switch (intent) {
+        case "suppress_retrieval": {
+          const r = setMemorySuppression(database, { peer, record_key: recordKey, suppress: true, correction_note: repair.note ? String(repair.note) : null });
+          if (!r) throw new Error("no memory_provenance record for selector");
+          result = { suppressed: true, record_key: recordKey, delete_requested: false };
+          break;
+        }
+        case "correct_objective_error":
+        case "change_interpretation": {
+          const r = correctMemoryProvenance(database, { peer, record_key: recordKey, correction_note: correctionText });
+          if (!r) throw new Error("no memory_provenance record for selector");
+          result = { corrected_from: r.corrected_from, provenance_class: r.provenance_class, delete_requested: false };
+          break;
+        }
+        case "supersede": {
+          const r = correctMemoryProvenance(database, { peer, record_key: recordKey, correction_note: correctionText });
+          if (!r) throw new Error("no memory_provenance record for selector");
+          result = { superseded: true, corrected_from: r.corrected_from, delete_requested: false };
+          break;
+        }
+        case "retract": {
+          const r = setMemorySuppression(database, { peer, record_key: recordKey, suppress: false, correction_note: repair.note ? String(repair.note) : null });
+          if (!r) throw new Error("no memory_provenance record for selector");
+          result = { retracted: true, suppress_flag: r.suppress_flag, delete_requested: false };
+          break;
+        }
+        default:
+          throw new Error("unhandled intent for memory_provenance apply");
+      }
+      const resultJson = JSON.stringify(result);
+      database.prepare("UPDATE open_hand_repairs SET status='applied', applied_at=?, result_json=? WHERE repair_id=?")
+        .run(now, resultJson, action.repair_id);
+      return { applied: true, source_deleted: false, repair: row(database, action.repair_id) };
+    }
+
+    throw new Error("repair has no native apply adapter");
   })();
 }
 
