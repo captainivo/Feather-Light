@@ -9,6 +9,9 @@ describe("container packaging", () => {
     expect(dockerfile).toContain("USER node");
     expect(dockerfile).toContain("HEALTHCHECK");
     expect(dockerfile).not.toMatch(/COPY\s+\.\s+\./);
+    expect(dockerfile).toContain("services/river-slate");
+    expect(dockerfile).toContain("services/shard-lantern");
+    expect(dockerfile).toContain("container-supervisor.mjs");
   });
 
   it("mounts canon read-only and drops container capabilities", () => {
@@ -30,6 +33,22 @@ describe("container packaging", () => {
       expect.objectContaining({ target: "/archive/westpole", read_only: true }),
       expect.objectContaining({ target: "/run/secrets/feather-light-api-token", read_only: true }),
     ]));
+    expect(service.volumes).toEqual(expect.arrayContaining([
+      "feather-light-state:/var/lib/feather-light",
+      "river-slate-state:/var/lib/river-slate",
+      "shard-lantern-state:/var/lib/shard-lantern",
+    ]));
+  });
+
+  it("supervises and health-checks every packaged process without private seed data", () => {
+    const supervisor = readFileSync("deployment/container-supervisor.mjs", "utf8");
+    const healthcheck = readFileSync("deployment/container-healthcheck.mjs", "utf8");
+    for (const component of ["Granite-Wing", "River-Slate", "Shard-Lantern"]) {
+      expect(supervisor).toContain(component);
+      expect(healthcheck).toContain(component);
+    }
+    expect(supervisor).toContain("await waitForGranite()");
+    expect(readFileSync("compose.yaml", "utf8")).not.toContain("SHARD_LANTERN_SEED_FILE");
   });
 
   it("excludes private and generated archive material from build context", () => {

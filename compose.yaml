@@ -11,8 +11,15 @@ services:
     environment:
       NODE_ENV: production
       FEATHER_LIGHT_CONFIG: /etc/feather-light/config.yaml
+      FEATHER_LIGHT_DB: /var/lib/feather-light/feather-light.sqlite3
+      HEALTH_CARD_DIR: /var/lib/river-slate/health-card
+      AUTHORA_API_BASE_URL: http://127.0.0.1:8421
+      SHARD_LANTERN_DB: /var/lib/shard-lantern/shard-lantern.sqlite3
+      GRANITE_WING_URL: http://127.0.0.1:8765
     volumes:
       - feather-light-state:/var/lib/feather-light
+      - river-slate-state:/var/lib/river-slate
+      - shard-lantern-state:/var/lib/shard-lantern
       - type: bind
         source: ./deployment/config.container.yaml
         target: /etc/feather-light/config.yaml
@@ -35,3 +42,5 @@ services:
 
 volumes:
   feather-light-state:
+  river-slate-state:
+  shard-lantern-state:

@@ -16,9 +16,10 @@ The host publishes only required ports on the trusted network. n8n remains an or
 and calls the Story Archive API; it does not become the owner of Markdown, Git history, or ledger
 state.
 
-The first containerization slice should add a multi-stage image for the existing TypeScript service,
-health checks, persistent state mounts, read-only canonical archive mounts, and secret-file mounts.
-The other three modules can then be added behind explicit route and storage namespaces.
+The image uses independent build stages for the root service, River-Slate, and Shard-Lantern. A
+minimal Node supervisor starts Granite-Wing first, waits for its API and shared database, then starts
+the two dependent services. If any process exits unexpectedly, the supervisor terminates the whole
+unit so container restart policy can restore a coherent set rather than leave a partial stack.
 
 ## Implemented first slice
 
@@ -29,7 +30,19 @@ configuration, the API token, and canonical Markdown use read-only bind mounts. 
 `/archive/westpole`, and the Docker build context explicitly excludes local configuration, state,
 private archives, and migration artifacts.
 
-This slice packages only the existing Feather-Light process. It does not yet claim that Aauthora,
-River-Slate, Shard-Lantern, Granite-Wing, n8n, or Ollama run inside the same Compose unit. Their
-service definitions will be added individually with explicit ports, health dependencies, storage,
-and API boundaries rather than hidden inside this image.
+## Consolidated process shell
+
+The image now packages Granite-Wing, Sky-Loom, River-Slate, and Shard-Lantern. Granite-Wing and
+Sky-Loom are modules of the root Feather-Light process; River-Slate and Shard-Lantern remain separate
+processes and data owners inside the same container. The container health check verifies all three
+HTTP processes on loopback. Only Granite-Wing's authenticated port is published by Compose.
+
+Named volumes keep the Feather-Light ledger/index, River-Slate generated health-card state, and
+Shard-Lantern database independent. Canon remains a read-only bind mount. Private Shard-Lantern seed
+data is intentionally not wired into the synthetic/default manifest; it will be provided as a
+private mounted file during the later state migration.
+
+The old Aauthora API on `8421` remains external for now because it still owns emotional state,
+outfit, and possessions. Sky-Loom's deterministic environment engine already lives in the root
+process and database; packaging it does not falsely claim those remaining responsibilities have
+been migrated.
