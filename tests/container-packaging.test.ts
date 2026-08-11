@@ -47,11 +47,13 @@ describe("container packaging", () => {
     const compose = parse(readFileSync("compose.yaml", "utf8")) as { services: Record<string, Record<string, unknown>> };
     const writer = compose.services["archive-writer"] as {
       network_mode: string; read_only: boolean; command: string[];
+      working_dir: string;
       volumes: Array<string | Record<string, unknown>>; cap_drop: string[];
     };
     expect(writer.network_mode).toBe("none");
     expect(writer.read_only).toBe(true);
     expect(writer.command).toContain("archive-writer");
+    expect(writer.working_dir).toBe("/app/granite-wing");
     expect(writer.cap_drop).toContain("ALL");
     const writerArchive = writer.volumes.find((volume) => typeof volume === "object" && volume.target === "/archive/westpole");
     expect(writerArchive).toBeDefined();
@@ -95,12 +97,13 @@ describe("container packaging", () => {
   it("ships an Unraid manifest with the writer gated behind an explicit profile", () => {
     const compose = parse(readFileSync("deployment/compose.unraid.yaml", "utf8")) as {
       name: string;
-      services: Record<string, { profiles?: string[]; network_mode?: string; volumes?: Array<string | Record<string, unknown>> }>;
+      services: Record<string, { profiles?: string[]; network_mode?: string; working_dir?: string; volumes?: Array<string | Record<string, unknown>> }>;
     };
     expect(compose.name).toBe("feather_light");
     expect(compose.services["token-setup"]).toBeDefined();
     expect(compose.services["archive-writer"]?.profiles).toEqual(["archive-write"]);
     expect(compose.services["archive-writer"]?.network_mode).toBe("none");
+    expect(compose.services["archive-writer"]?.working_dir).toBe("/app/granite-wing");
     expect(compose.services["feather-light"]?.volumes).toEqual(expect.arrayContaining([
       expect.objectContaining({ target: "/archive/westpole", read_only: true }),
     ]));

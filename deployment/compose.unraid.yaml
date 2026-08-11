@@ -123,6 +123,7 @@ services:
     image: feather-light:acceptance
     restart: unless-stopped
     init: true
+    working_dir: /app/granite-wing
     command: ["node", "/app/granite-wing/dist/src/cli.js", "archive-writer"]
     network_mode: "none"
     environment:
