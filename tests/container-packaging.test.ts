@@ -91,4 +91,18 @@ describe("container packaging", () => {
       expect.objectContaining({ path: "/archive/westpole", readOnly: true }),
     ]);
   });
+
+  it("ships an Unraid manifest with the writer gated behind an explicit profile", () => {
+    const compose = parse(readFileSync("deployment/compose.unraid.yaml", "utf8")) as {
+      name: string;
+      services: Record<string, { profiles?: string[]; network_mode?: string; volumes?: Array<string | Record<string, unknown>> }>;
+    };
+    expect(compose.name).toBe("feather_light");
+    expect(compose.services["token-setup"]).toBeDefined();
+    expect(compose.services["archive-writer"]?.profiles).toEqual(["archive-write"]);
+    expect(compose.services["archive-writer"]?.network_mode).toBe("none");
+    expect(compose.services["feather-light"]?.volumes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ target: "/archive/westpole", read_only: true }),
+    ]));
+  });
 });

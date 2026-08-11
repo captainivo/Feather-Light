@@ -1,0 +1,157 @@
+name: feather_light
+
+services:
+  token-setup:
+    image: alpine:3.22
+    container_name: Feather-Light-Token-Setup
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        if [ ! -s /secrets/feather-light-api-token ]; then
+          umask 077;
+          head -c 48 /dev/urandom | base64 > /secrets/feather-light-api-token;
+          chown 1000:1000 /secrets/feather-light-api-token;
+          chmod 600 /secrets/feather-light-api-token;
+        fi;
+        cp /source-icon /unraid-images/Feather-Light-icon.png;
+        chmod 644 /unraid-images/Feather-Light-icon.png
+    volumes:
+      - /mnt/user/appdata/feather-light-secrets:/secrets
+      - /mnt/user/appdata/feather-light-source/assets/feather-light-icon.png:/source-icon:ro
+      - /var/lib/docker/unraid/images:/unraid-images
+    restart: "no"
+
+  aauthora-tunnel:
+    container_name: Feather-Light-Aauthora-Tunnel
+    build:
+      context: /mnt/user/appdata/feather-light-source
+      target: runtime
+    image: feather-light:acceptance
+    restart: unless-stopped
+    init: true
+    entrypoint: ["ssh"]
+    command:
+      - -NT
+      - -i
+      - /run/secrets/aauthora-tunnel-key
+      - -o
+      - IdentitiesOnly=yes
+      - -o
+      - ExitOnForwardFailure=yes
+      - -o
+      - ServerAliveInterval=30
+      - -o
+      - ServerAliveCountMax=3
+      - -o
+      - StrictHostKeyChecking=yes
+      - -L
+      - 0.0.0.0:18421:127.0.0.1:8421
+      - mithra@192.168.1.65
+    volumes:
+      - /mnt/user/appdata/feather-light-secrets/aauthora-tunnel-key:/run/secrets/aauthora-tunnel-key:ro
+      - /mnt/user/appdata/feather-light-secrets/aauthora-tunnel-known-hosts:/home/node/.ssh/known_hosts:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    healthcheck:
+      test: ["CMD", "node", "-e", "const n=require('node:net').connect(18421,'127.0.0.1');n.setTimeout(3000);n.on('connect',()=>{n.end();process.exit(0)});n.on('error',()=>process.exit(1));n.on('timeout',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  feather-light:
+    container_name: Feather-Light
+    build:
+      context: /mnt/user/appdata/feather-light-source
+      target: runtime
+    image: feather-light:acceptance
+    restart: unless-stopped
+    init: true
+    depends_on:
+      token-setup:
+        condition: service_completed_successfully
+      aauthora-tunnel:
+        condition: service_healthy
+    labels:
+      net.unraid.docker.icon: /mnt/user/appdata/feather-light-source/assets/feather-light-icon.png
+    ports:
+      - 192.168.1.73:18765:8765
+    environment:
+      NODE_ENV: production
+      FEATHER_LIGHT_CONFIG: /etc/feather-light/config.yaml
+      FEATHER_LIGHT_DB: /var/lib/feather-light/feather-light.sqlite3
+      HEALTH_CARD_DIR: /var/lib/river-slate/health-card
+      AUTHORA_API_BASE_URL: http://aauthora-tunnel:18421
+      OLLAMA_BASE_URL: http://192.168.1.73:11434
+      SHARD_LANTERN_DB: /var/lib/shard-lantern/shard-lantern.sqlite3
+      GRANITE_WING_URL: http://127.0.0.1:8765
+    volumes:
+      - feather-light-state:/var/lib/feather-light
+      - river-slate-state:/var/lib/river-slate
+      - shard-lantern-state:/var/lib/shard-lantern
+      - type: bind
+        source: /mnt/user/appdata/feather-light-source/deployment/config.container.yaml
+        target: /etc/feather-light/config.yaml
+        read_only: true
+      - type: bind
+        source: /mnt/user/appdata/feather-light-secrets
+        target: /run/secrets
+        read_only: true
+      - type: bind
+        source: /mnt/user/Documents/The Westpole
+        target: /archive/westpole
+        read_only: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  archive-writer:
+    profiles: ["archive-write"]
+    container_name: Feather-Light-Archive-Writer
+    build:
+      context: /mnt/user/appdata/feather-light-source
+      target: runtime
+    image: feather-light:acceptance
+    restart: unless-stopped
+    init: true
+    command: ["node", "/app/granite-wing/dist/src/cli.js", "archive-writer"]
+    network_mode: "none"
+    environment:
+      NODE_ENV: production
+      FEATHER_LIGHT_CONFIG: /etc/feather-light/config.yaml
+      FEATHER_LIGHT_DB: /var/lib/feather-light/feather-light.sqlite3
+      ARCHIVE_WRITER_ID: feather-light-writer-1
+      ARCHIVE_WRITER_POLL_MS: "5000"
+      ARCHIVE_WRITER_LEASE_SECONDS: "300"
+    volumes:
+      - feather-light-state:/var/lib/feather-light
+      - type: bind
+        source: /mnt/user/appdata/feather-light-source/deployment/config.container.yaml
+        target: /etc/feather-light/config.yaml
+        read_only: true
+      - type: bind
+        source: /mnt/user/Documents/The Westpole
+        target: /archive/westpole
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    healthcheck:
+      disable: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  feather-light-state:
+  river-slate-state:
+  shard-lantern-state:
