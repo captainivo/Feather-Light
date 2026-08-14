@@ -32,6 +32,11 @@ machine-specific paths are not published.
 
 ```bash
 npm run cli -- status
+npm run cli -- continuity manifest
+npm run cli -- continuity manifest --output /private/path/continuity-manifest.json
+npm run cli -- influence policies
+npm run cli -- influence evaluate --source-class model_inference --domain inner_growth --operation write --subject growth:candidate-1 --source-ref model:run-1
+npm run cli -- influence decisions --limit 25
 npm run cli -- ingest --dry-run
 npm run cli -- ingest
 npm run cli -- archive audit
@@ -64,6 +69,43 @@ npm run dev
 
 Run `npm run cli -- help` for the complete command summary. Add `--json` to `status`,
 `search`, `show`, or `duplicates` when scripting.
+
+`continuity manifest` produces a read-only, content-free certificate of the active Feather-Light
+assembly. It hashes configured identity artifacts, the migration ledger, indexed archive records,
+and the latest environment snapshot; it also reports bounded health metadata for writable stores.
+Artifact contents and configured filesystem paths are never emitted. The `manifestHash` excludes
+the generation timestamp, so unchanged state produces the same certificate hash. Required missing
+identity artifacts produce an error health state; optional or unconfigured components degrade
+health without preventing inspection. Output is written with mode `0600` and is refused inside a
+configured canonical archive root.
+
+The source-aware influence gate separates evidence from authority. Its migration-owned policy
+matrix assigns each source/domain pair one maximum authority: `deny`, `propose`, or `write`.
+`propose` permits a body-free candidate receipt but a write attempt returns `review`; only a new
+explicitly authoritative request may adopt it. Foundation is denied for every source. Mithra's
+explicit choices may write growth, private reflection, agency, and her relationship understanding;
+Zach's explicit statements may write his profile; canonical archive records may populate the canon
+index; Honcho and model inference remain proposals where they are admitted at all.
+
+Authenticated API mutations of growth, longing, and agency require an `influence` envelope with a
+unique `request_id`, a typed `source_class`, and a bounded `source_ref`. Missing context fails closed.
+Review-required writes return HTTP `409`; denied writes return `403`; neither mutates the target
+ledger. Every evaluation receives an append-only, idempotent receipt containing selectors and
+provenance but never proposed content. Policy and receipt inspection are available through the
+`influence_policies`, `influence_decisions`, and `influence_evaluate` query operations. The policy
+version, policy hash, and bounded decision counts are included in the continuity manifest.
+
+Explicit adoption resubmits the same domain operation with a new `mithra_explicit` envelope and an
+`adopts_request_id` pointing to the review receipt. Feather-Light binds adoption to the original
+domain, subject, and a server-computed SHA-256 payload hash, so a different body cannot be
+substituted. The receipt retains the hash, not the private payload. Replaying a committed admitted
+request returns a bounded replay result and never performs the mutation twice.
+
+The Hermes Open Hand adapter derives this envelope from trusted handler context. Its model-facing
+schema cannot supply or override `source_class`: agency writes are deliberate first-person
+`mithra_explicit` acts, state reads claim no write authority, and adoption references are removed
+from the agency body before domain validation. Hermes session identifiers are hashed before use as
+source references.
 
 Search deduplication is caller-controlled:
 

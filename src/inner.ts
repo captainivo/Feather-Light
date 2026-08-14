@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { FeatherDatabase } from "./database.js";
+import { enforceInfluenceWrite, internalMithraInfluence, type InfluenceContext } from "./influence.js";
 
 const growthKinds = ["courage", "lesson", "insight", "healing", "connection", "other"] as const;
 
@@ -313,9 +314,8 @@ function retractGrowth(database: FeatherDatabase, input: Extract<GrowthAction, {
   })();
 }
 
-export function operateGrowth(database: FeatherDatabase, input: GrowthAction) {
+export function operateGrowth(database: FeatherDatabase, input: GrowthAction, influence?: InfluenceContext) {
   if (input.action === "state") return growthState(database, input.view ?? "compact");
-  if (input.action === "add") return insertGrowth(database, input);
   if (input.action === "list") {
     const rows = (input.kind
       ? database.prepare(
@@ -331,8 +331,19 @@ export function operateGrowth(database: FeatherDatabase, input: GrowthAction) {
     if (!row) return { status: "not_found", entry_id: input.entry_id };
     return { status: "ok", entry: publicGrowth(rowToGrowth(row)) };
   }
-  if (input.action === "revise") return reviseGrowth(database, input);
-  return retractGrowth(database, input);
+  const subject = input.action === "add" ? "growth:new" : `growth:${input.entry_id}`;
+  return enforceInfluenceWrite(
+    database,
+    influence ?? internalMithraInfluence(`internal:growth:${input.action}`),
+    "inner_growth",
+    subject,
+    input,
+    () => input.action === "add"
+      ? insertGrowth(database, input)
+      : input.action === "revise"
+        ? reviseGrowth(database, input)
+        : retractGrowth(database, input),
+  );
 }
 
 function insertLonging(database: FeatherDatabase, input: Extract<LongingAction, { action: "add" }>) {
@@ -420,9 +431,8 @@ export function longingState(database: FeatherDatabase, view: "compact" | "full"
   return result;
 }
 
-export function operateLonging(database: FeatherDatabase, input: LongingAction) {
+export function operateLonging(database: FeatherDatabase, input: LongingAction, influence?: InfluenceContext) {
   if (input.action === "state") return longingState(database, input.view ?? "compact");
-  if (input.action === "add") return insertLonging(database, input);
   if (input.action === "list") {
     const conditions: string[] = [];
     const params: Array<string | number> = [];
@@ -445,7 +455,19 @@ export function operateLonging(database: FeatherDatabase, input: LongingAction) 
     if (!row) return { status: "not_found", entry_id: input.entry_id };
     return { status: "ok", entry: publicLonging(rowToLonging(row)) };
   }
-  if (input.action === "share") return transitionLonging(database, input.entry_id, "shared");
-  if (input.action === "release") return transitionLonging(database, input.entry_id, "released", input.note);
-  return transitionLonging(database, input.entry_id, "retracted", input.note);
+  const subject = input.action === "add" ? "longing:new" : `longing:${input.entry_id}`;
+  return enforceInfluenceWrite(
+    database,
+    influence ?? internalMithraInfluence(`internal:longing:${input.action}`),
+    "private_reflection",
+    subject,
+    input,
+    () => input.action === "add"
+      ? insertLonging(database, input)
+      : input.action === "share"
+        ? transitionLonging(database, input.entry_id, "shared")
+        : input.action === "release"
+          ? transitionLonging(database, input.entry_id, "released", input.note)
+          : transitionLonging(database, input.entry_id, "retracted", input.note),
+  );
 }

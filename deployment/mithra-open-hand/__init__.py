@@ -71,6 +71,10 @@ SCHEMA = {
             "expires_at": {"type": "string", "description": "Optional timezone-aware ISO-8601 expiry."},
             "note": {"type": "string", "description": "Optional; justification is never required."},
             "idempotency_key": {"type": "string"},
+            "adopts_request_id": {
+                "type": "string",
+                "description": "Exact review receipt being explicitly adopted; the server also verifies the payload hash.",
+            },
             "repair_id": {"type": "string"},
             "intent": {
                 "type": "string",
@@ -132,8 +136,29 @@ def _request(payload: dict[str, Any]) -> dict[str, Any]:
         return {"status": "unavailable", "error": type(exc).__name__}
 
 
-def _query(agency: dict[str, Any]) -> dict[str, Any]:
-    return _request({"operation": "agency", "agency": agency})
+def _influence_context(agency: dict[str, Any], session_id: str) -> dict[str, str]:
+    canonical = json.dumps(agency, sort_keys=True, separators=(",", ":"))
+    session_digest = hashlib.sha256((session_id or "local").encode("utf-8")).hexdigest()
+    request_digest = hashlib.sha256(
+        f"hermes-agency-v1:{session_digest}:{canonical}".encode("utf-8")
+    ).hexdigest()
+    context = {
+        "request_id": f"hermes-agency:{request_digest}",
+        "source_class": "mithra_explicit",
+        "source_ref": f"hermes-session:{session_digest[:24]}",
+    }
+    adopts = agency.pop("adopts_request_id", None)
+    if isinstance(adopts, str) and adopts.strip():
+        context["adopts_request_id"] = adopts.strip()
+    return context
+
+
+def _query(agency: dict[str, Any], *, session_id: str = "") -> dict[str, Any]:
+    if agency.get("action") == "state":
+        return _request({"operation": "agency", "agency": agency})
+    bounded = dict(agency)
+    influence = _influence_context(bounded, session_id)
+    return _request({"operation": "agency", "agency": bounded, "influence": influence})
 
 
 def project_tool_args(args: Any) -> dict[str, Any]:
@@ -192,7 +217,7 @@ def _cached_decision(key: str) -> tuple[bool, dict[str, str] | None]:
     return True, decision
 
 
-def handle(args: dict[str, Any] | str, **_kwargs: Any) -> str:
+def handle(args: dict[str, Any] | str, **kwargs: Any) -> str:
     if isinstance(args, str):
         agency: dict[str, Any] = {"action": "state", "view": "compact"}
     else:
@@ -207,7 +232,7 @@ def handle(args: dict[str, Any] | str, **_kwargs: Any) -> str:
         if response.get("status") == "ok" and repair["action"] not in {"state", "capabilities"}:
             _DECISION_CACHE.clear()
         return json.dumps(response, ensure_ascii=False, separators=(",", ":"))
-    response = _query(agency)
+    response = _query(agency, session_id=str(kwargs.get("session_id") or ""))
     if response.get("status") == "ok" and action != "state":
         _DECISION_CACHE.clear()
     return json.dumps(response, ensure_ascii=False, separators=(",", ":"))

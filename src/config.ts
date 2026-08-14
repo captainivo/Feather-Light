@@ -36,6 +36,17 @@ const configSchema = z.object({
     })
     .default({ host: "127.0.0.1", port: 8765 }),
   database: z.object({ path: z.string().min(1).default("state/feather-light.sqlite3") }),
+  continuity: z
+    .object({
+      identityArtifacts: z.array(z.object({
+        id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/),
+        path: z.string().min(1),
+        required: z.boolean().default(true),
+        immutable: z.boolean().default(true),
+        maxBytes: z.number().int().min(1).max(10_000_000).default(1_048_576),
+      })).default([]),
+    })
+    .default({ identityArtifacts: [] }),
   aauthora: z
     .object({
       baseUrl: z
@@ -106,7 +117,12 @@ const configSchema = z.object({
     }),
 });
 
-export type Config = z.infer<typeof configSchema>;
+type ParsedConfig = z.infer<typeof configSchema>;
+
+// Keep hand-built Config fixtures source-compatible while loadConfig always supplies defaults.
+export type Config = Omit<ParsedConfig, "continuity"> & {
+  continuity?: ParsedConfig["continuity"];
+};
 
 export function loadConfig(
   path = process.env.FEATHER_LIGHT_CONFIG ?? "config.yaml",
@@ -119,6 +135,7 @@ export function loadConfig(
   if (env.AUTHORA_API_BASE_URL) config.aauthora.baseUrl = privateServiceUrl.parse(env.AUTHORA_API_BASE_URL);
   if (env.OLLAMA_BASE_URL) config.ollama.baseUrl = privateServiceUrl.parse(env.OLLAMA_BASE_URL);
   config.database.path = resolve(configDirectory, config.database.path);
+  for (const artifact of config.continuity.identityArtifacts) artifact.path = resolve(configDirectory, artifact.path);
   if (config.server.authTokenFile) config.server.authTokenFile = resolve(configDirectory, config.server.authTokenFile);
   for (const root of config.archiveRoots) root.path = resolve(configDirectory, root.path);
   return config;

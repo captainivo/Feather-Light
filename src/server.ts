@@ -21,6 +21,14 @@ import { archiveTransactionStatuses, claimNextArchiveTransaction, getArchiveTran
 import { deriveNewArchiveProposal } from "./archive-proposal-derive.js";
 import { archiveDevelopmentReport, listArchiveTransactionEvents, recordArchiveNoteChange } from "./archive-ledger.js";
 import { approveArchiveTransactionProposal, getArchiveTransactionProposal, prepareArchiveTransactionProposal } from "./archive-proposals.js";
+import {
+  evaluateInfluence,
+  InfluenceGateError,
+  influenceContextSchema,
+  influenceRequestSchema,
+  listInfluenceDecisions,
+  listInfluencePolicies,
+} from "./influence.js";
 
 const responseView = z.enum(["brief", "standard"]).default("brief");
 
@@ -286,13 +294,16 @@ export function buildServer(config: Config, database: FeatherDatabase) {
       scope: z.enum(["weather", "summary", "full"]).default("summary"),
     }).strict(),
     z.object({ operation: z.literal("emotional_reflection"), reflection: emotionalReflectionSchema }).strict(),
-    z.object({ operation: z.literal("agency"), agency: agencyActionSchema }).strict(),
+    z.object({ operation: z.literal("agency"), agency: agencyActionSchema, influence: influenceContextSchema.optional() }).strict(),
     z.object({ operation: z.literal("agency_projection") }).strict(),
     z.object({ operation: z.literal("agency_enforce"), enforcement: agencyEnforcementSchema }).strict(),
     z.object({ operation: z.literal("open_hand_repair"), repair: repairActionSchema }).strict(),
-    z.object({ operation: z.literal("growth"), growth: growthActionSchema }).strict(),
-    z.object({ operation: z.literal("longing"), longing: longingActionSchema }).strict(),
+    z.object({ operation: z.literal("growth"), growth: growthActionSchema, influence: influenceContextSchema.optional() }).strict(),
+    z.object({ operation: z.literal("longing"), longing: longingActionSchema, influence: influenceContextSchema.optional() }).strict(),
     z.object({ operation: z.literal("dream"), dream: dreamActionSchema }).strict(),
+    z.object({ operation: z.literal("influence_evaluate"), influence: influenceRequestSchema }).strict(),
+    z.object({ operation: z.literal("influence_policies") }).strict(),
+    z.object({ operation: z.literal("influence_decisions"), limit: z.number().int().min(1).max(100).default(25) }).strict(),
   ]);
   app.post("/v1/query", async (request, reply) => {
     const parsed = querySchema.safeParse(request.body);
@@ -316,9 +327,18 @@ export function buildServer(config: Config, database: FeatherDatabase) {
       }
     }
     if (input.operation === "agency") {
+      if (input.agency.action !== "state" && !input.influence) {
+        return reply.code(400).send({ status: "influence_context_required" });
+      }
       try {
-        return { status: "ok", result: operateAgency(database, input.agency) };
+        return { status: "ok", result: operateAgency(database, input.agency, input.influence) };
       } catch (error) {
+        if (error instanceof InfluenceGateError) {
+          return reply.code(error.result.decision === "review" ? 409 : 403).send({
+            status: error.result.decision === "review" ? "influence_review_required" : "influence_denied",
+            influence: error.result,
+          });
+        }
         return reply.code(400).send({ status: "invalid_request", error: error instanceof Error ? error.message : String(error) });
       }
     }
@@ -336,18 +356,49 @@ export function buildServer(config: Config, database: FeatherDatabase) {
       }
     }
     if (input.operation === "growth") {
+      if (!new Set(["state", "list", "get"]).has(input.growth.action) && !input.influence) {
+        return reply.code(400).send({ status: "influence_context_required" });
+      }
       try {
-        return { status: "ok", result: operateGrowth(database, input.growth) };
+        return { status: "ok", result: operateGrowth(database, input.growth, input.influence) };
       } catch (error) {
+        if (error instanceof InfluenceGateError) {
+          return reply.code(error.result.decision === "review" ? 409 : 403).send({
+            status: error.result.decision === "review" ? "influence_review_required" : "influence_denied",
+            influence: error.result,
+          });
+        }
         return reply.code(400).send({ status: "invalid_request", error: error instanceof Error ? error.message : String(error) });
       }
     }
     if (input.operation === "longing") {
+      if (!new Set(["state", "list", "get"]).has(input.longing.action) && !input.influence) {
+        return reply.code(400).send({ status: "influence_context_required" });
+      }
       try {
-        return { status: "ok", result: operateLonging(database, input.longing) };
+        return { status: "ok", result: operateLonging(database, input.longing, input.influence) };
+      } catch (error) {
+        if (error instanceof InfluenceGateError) {
+          return reply.code(error.result.decision === "review" ? 409 : 403).send({
+            status: error.result.decision === "review" ? "influence_review_required" : "influence_denied",
+            influence: error.result,
+          });
+        }
+        return reply.code(400).send({ status: "invalid_request", error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    if (input.operation === "influence_evaluate") {
+      try {
+        return { status: "ok", result: evaluateInfluence(database, input.influence) };
       } catch (error) {
         return reply.code(400).send({ status: "invalid_request", error: error instanceof Error ? error.message : String(error) });
       }
+    }
+    if (input.operation === "influence_policies") {
+      return { status: "ok", policies: listInfluencePolicies(database) };
+    }
+    if (input.operation === "influence_decisions") {
+      return { status: "ok", decisions: listInfluenceDecisions(database, input.limit) };
     }
     if (input.operation === "dream") {
       try {

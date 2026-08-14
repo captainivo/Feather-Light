@@ -5,6 +5,17 @@ server:
 database:
   path: "state/feather-light.sqlite3"
 
+# Identity artifacts are hashed but never included in manifest output.
+# Paths may be absolute or relative to this configuration file.
+continuity:
+  identityArtifacts: []
+# To verify a mounted identity file, replace the empty list with:
+#   identityArtifacts:
+#     - id: "foundation"
+#       path: "/identity/FOUNDATION.md"
+#       required: true
+#       immutable: true
+
 aauthora:
   baseUrl: "http://127.0.0.1:8421"
   timeoutMs: 2000

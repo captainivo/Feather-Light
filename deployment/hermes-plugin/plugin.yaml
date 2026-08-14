@@ -4,3 +4,4 @@ description: "Bounded Westpole retrieval, current world state, and deliberate em
 author: Feather-Light Project
 provides_tools:
   - feather_light
+  - mithra_inner

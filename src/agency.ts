@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { FeatherDatabase } from "./database.js";
+import { enforceInfluenceWrite, internalMithraInfluence, type InfluenceContext } from "./influence.js";
 
 const directiveFields = {
   kind: z.enum(["refusal", "pause", "withdrawal", "correction", "explicit_permission"]),
@@ -165,9 +166,21 @@ export function agencyHistory(database: FeatherDatabase, limit = 50): Row[] {
   ).all(Math.max(1, Math.min(limit, 100))) as Row[];
 }
 
-export function operateAgency(database: FeatherDatabase, input: AgencyAction) {
+export function operateAgency(database: FeatherDatabase, input: AgencyAction, influence?: InfluenceContext) {
   if (input.action === "state") return agencyState(database, input.view);
-  if (input.action === "set" || input.action === "repair") return insertDirective(database, input);
-  if (input.action === "revise") return reviseDirective(database, input);
-  return retractDirective(database, input);
+  const subject = input.action === "set" || input.action === "repair"
+    ? `agency:${input.scope_type}:${input.scope_value}`
+    : `agency:${input.directive_id}`;
+  return enforceInfluenceWrite(
+    database,
+    influence ?? internalMithraInfluence(`internal:agency:${input.action}`),
+    "agency",
+    subject,
+    input,
+    () => input.action === "set" || input.action === "repair"
+      ? insertDirective(database, input)
+      : input.action === "revise"
+        ? reviseDirective(database, input)
+        : retractDirective(database, input),
+  );
 }

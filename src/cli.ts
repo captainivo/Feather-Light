@@ -1,6 +1,7 @@
 import { parseArgs } from "node:util";
+import { randomUUID } from "node:crypto";
 import { dirname, resolve, sep } from "node:path";
-import { readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { ensureEnvironmentCurrent } from "./aauthora.js";
 import { listChronologyPeriods, queryChronology, rebuildChronology } from "./chronology.js";
 import { loadConfig } from "./config.js";
@@ -28,11 +29,17 @@ import { buildArchiveMigrationChangeSet, createArchiveMigrationReviewTemplate, s
 import { renderArchiveMigrationReviewPage } from "./archive-migration-review-page.js";
 import { renderArchiveMigrationPreview } from "./archive-migration-render.js";
 import { runArchiveWriterDaemon } from "./archive-writer-daemon.js";
+import { buildContinuityManifest } from "./continuity.js";
+import { evaluateInfluence, listInfluenceDecisions, listInfluencePolicies } from "./influence.js";
 
 const HELP = `Feather-Light — read-only Westpole search
 
 Usage:
   npm run cli -- status
+  npm run cli -- continuity manifest [--output MANIFEST.json]
+  npm run cli -- influence policies
+  npm run cli -- influence decisions [--limit N]
+  npm run cli -- influence evaluate --source-class CLASS --domain DOMAIN --operation propose|write --subject REF --source-ref REF [--request-id ID]
   npm run cli -- ingest [--dry-run] [--root ROOT_ID]
   npm run cli -- archive audit [--root ROOT_ID] [--output MANIFEST.json]
   npm run cli -- archive plan [--root ROOT_ID] [--limit N] [--output PLAN.json]
@@ -256,6 +263,72 @@ async function main(): Promise<void> {
   try {
     if (command === "migrate") {
       console.log(JSON.stringify({ status: "ok", schemaVersion: SCHEMA_VERSION }));
+    } else if (command === "continuity") {
+      const [operation = "manifest", ...continuityArgs] = rest;
+      if (operation !== "manifest") throw new Error("continuity operation must be manifest");
+      const { values } = parseArgs({ args: continuityArgs, options: { output: { type: "string", short: "o" } } });
+      const manifest = buildContinuityManifest(database, config);
+      const serialized = `${JSON.stringify(manifest, null, 2)}\n`;
+      if (values.output) {
+        if (config.archiveRoots.some((root) => outputIsInsideArchive(values.output!, root.path))) {
+          throw new Error("continuity manifest output must be outside every configured archive root");
+        }
+        const output = resolve(values.output);
+        if (existsSync(output) && lstatSync(output).isSymbolicLink()) {
+          throw new Error("continuity manifest output must not be a symbolic link");
+        }
+        writeFileSync(output, serialized, { encoding: "utf8", mode: 0o600 });
+        chmodSync(output, 0o600);
+        console.log(JSON.stringify({
+          status: "ok",
+          readOnly: true,
+          output,
+          health: manifest.health,
+          manifestHash: manifest.manifestHash,
+          issues: manifest.issues.length,
+        }, null, 2));
+      } else {
+        console.log(serialized.trimEnd());
+      }
+    } else if (command === "influence") {
+      const operation = rest[0];
+      if (operation === "policies") {
+        console.log(JSON.stringify({ status: "ok", policies: listInfluencePolicies(database) }, null, 2));
+      } else if (operation === "decisions") {
+        const { values } = parseArgs({
+          args: rest.slice(1),
+          options: { limit: { type: "string", default: "25" } },
+          strict: true,
+        });
+        console.log(JSON.stringify({
+          status: "ok",
+          decisions: listInfluenceDecisions(database, positiveInteger(values.limit, 25)),
+        }, null, 2));
+      } else if (operation === "evaluate") {
+        const { values } = parseArgs({
+          args: rest.slice(1),
+          options: {
+            "source-class": { type: "string" },
+            domain: { type: "string" },
+            operation: { type: "string" },
+            subject: { type: "string" },
+            "source-ref": { type: "string" },
+            "request-id": { type: "string" },
+          },
+          strict: true,
+        });
+        const result = evaluateInfluence(database, {
+          request_id: values["request-id"] ?? randomUUID(),
+          source_class: values["source-class"] as never,
+          source_ref: values["source-ref"] ?? "",
+          domain: values.domain as never,
+          operation: values.operation as never,
+          subject_ref: values.subject ?? "",
+        });
+        console.log(JSON.stringify({ status: "ok", result }, null, 2));
+      } else {
+        throw new Error("influence operation must be policies, decisions, or evaluate");
+      }
     } else if (command === "status") {
       const { values } = parseArgs({ args: rest, options: { json: { type: "boolean", default: false } } });
       const status = indexStatus(database) as {

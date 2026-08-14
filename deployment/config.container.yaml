@@ -6,6 +6,9 @@ server:
 database:
   path: "/var/lib/feather-light/feather-light.sqlite3"
 
+continuity:
+  identityArtifacts: []
+
 aauthora:
   baseUrl: "http://127.0.0.1:8421"
   timeoutMs: 2000

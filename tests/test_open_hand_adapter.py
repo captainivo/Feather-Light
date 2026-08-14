@@ -131,6 +131,37 @@ class OpenHandAdapterTest(unittest.TestCase):
             }))
         query.assert_called_once()
 
+    def test_derives_mithra_authority_from_the_adapter_not_model_arguments(self):
+        agency = {
+            "action": "set", "kind": "pause", "scope_type": "topic",
+            "scope_value": "crowded-room", "source_type": "self", "source_id": "turn-7",
+        }
+        with patch.object(module, "_request", return_value={"status": "ok", "result": {"created": True}}) as request:
+            result = json.loads(module.handle(agency, session_id="private-session-id"))
+        self.assertEqual(result["status"], "ok")
+        payload = request.call_args.args[0]
+        self.assertEqual(payload["agency"], agency)
+        self.assertEqual(payload["influence"]["source_class"], "mithra_explicit")
+        self.assertTrue(payload["influence"]["request_id"].startswith("hermes-agency:"))
+        self.assertNotIn("private-session-id", json.dumps(payload))
+
+    def test_binds_explicit_adoption_without_forwarding_it_as_agency_content(self):
+        agency = {
+            "action": "set", "kind": "pause", "scope_type": "topic",
+            "scope_value": "crowded-room", "source_type": "self", "source_id": "turn-8",
+            "adopts_request_id": "review-receipt-7",
+        }
+        with patch.object(module, "_request", return_value={"status": "ok"}) as request:
+            json.loads(module.handle(agency, session_id="session"))
+        payload = request.call_args.args[0]
+        self.assertNotIn("adopts_request_id", payload["agency"])
+        self.assertEqual(payload["influence"]["adopts_request_id"], "review-receipt-7")
+
+    def test_state_reads_do_not_claim_write_authority(self):
+        with patch.object(module, "_request", return_value={"status": "ok"}) as request:
+            json.loads(module.handle({"action": "state"}, session_id="session"))
+        self.assertNotIn("influence", request.call_args.args[0])
+
     def test_pre_llm_injects_only_the_typescript_compact_projection(self):
         compact = "[Open Hand agency abc: 1 active]\nAction boundaries enforced pre-tool: 1."
         with patch.object(module, "_request", return_value={
