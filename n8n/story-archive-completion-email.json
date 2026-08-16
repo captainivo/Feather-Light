@@ -2,118 +2,104 @@
   "name": "Story Archive - Completion Email",
   "nodes": [
     {
-      "parameters": {
-        "inputSource": "passthrough"
-      },
+      "parameters": { "rule": { "interval": [{ "field": "minutes", "minutesInterval": 1 }] } },
       "id": "5ee6309b-1ae5-4c78-8494-848d5b47be2b",
-      "name": "Receive Completed Transaction",
-      "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 1.1,
-      "position": [-420, 0]
+      "name": "Poll Notification Outbox",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-520, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FEATHER_LIGHT_BASE_URL + '/v1/archive/notifications/claim' }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "={{ 'Bearer ' + $env.FEATHER_LIGHT_API_TOKEN }}" }] },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ workerId: $env.FEATHER_LIGHT_NOTIFICATION_WORKER_ID, occurredAt: $now.toISO(), leaseSeconds: 300 }) }}",
+        "options": { "response": { "response": { "fullResponse": true, "neverError": true } } }
+      },
+      "id": "f14e27f9-0810-463a-8e29-b692ddb92c96",
+      "name": "Claim Completion Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-300, 0]
     },
     {
       "parameters": {
         "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 2
-          },
-          "conditions": [
-            {
-              "id": "a31a6265-b11f-41ff-98de-a5bc1798a43c",
-              "leftValue": "={{ $json.transaction_status }}",
-              "rightValue": "succeeded",
-              "operator": {
-                "type": "string",
-                "operation": "equals"
-              }
-            },
-            {
-              "id": "496fdb0f-95da-4acc-8988-e7f1a72885c1",
-              "leftValue": "={{ $json.note_id }}",
-              "rightValue": "",
-              "operator": {
-                "type": "string",
-                "operation": "notEmpty",
-                "singleValue": true
-              }
-            },
-            {
-              "id": "40f92d2a-d5de-45aa-86b8-e3ee3b70c944",
-              "leftValue": "={{ $json.git_revision }}",
-              "rightValue": "",
-              "operator": {
-                "type": "string",
-                "operation": "notEmpty",
-                "singleValue": true
-              }
-            }
-          ],
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2 },
+          "conditions": [{
+            "id": "a31a6265-b11f-41ff-98de-a5bc1798a43c",
+            "leftValue": "={{ $json.statusCode }}",
+            "rightValue": 200,
+            "operator": { "type": "number", "operation": "equals" }
+          }],
           "combinator": "and"
         },
         "options": {}
       },
       "id": "e1c365b4-05ca-450c-a3ed-e55f767c2d15",
-      "name": "Verified Archive Success?",
+      "name": "Notification Claimed?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [-180, 0]
+      "position": [-60, 0]
     },
     {
       "parameters": {
         "fromEmail": "={{ $env.ARCHIVE_NOTIFICATION_FROM }}",
         "toEmail": "={{ $env.ARCHIVE_NOTIFICATION_EMAIL }}",
-        "subject": "={{ '[Westpole Archive] ' + ($json.note_title ?? $json.note_id) + ' added' }}",
+        "subject": "={{ '[Westpole Archive] ' + ($json.body.notification.noteTitle ?? $json.body.notification.noteId) + ' added' }}",
         "emailFormat": "text",
-        "text": "={{ 'A note was successfully added to the private Westpole archive.\\n\\nTitle: ' + ($json.note_title ?? 'Untitled') + '\\nPermanent ID: ' + $json.note_id + '\\nOperation: ' + ($json.mode ?? 'archive') + '\\nCanon status: ' + ($json.canon_status ?? 'unknown') + '\\nChanged file: ' + ($json.relative_path ?? 'not reported') + '\\nGit revision: ' + $json.git_revision + '\\nTransaction: ' + ($json.transaction_id ?? 'not reported') + '\\nCompleted: ' + ($json.completed_at ?? 'not reported') + '\\n\\nThis message contains procedural details only; private story content is not included.' }}",
-        "options": {
-          "appendAttribution": false
-        }
+        "text": "={{ 'A note was successfully added to the private Westpole archive.\\n\\nTitle: ' + ($json.body.notification.noteTitle ?? 'Untitled') + '\\nPermanent ID: ' + $json.body.notification.noteId + '\\nOperation: ' + $json.body.notification.mode + '\\nCanon status: ' + $json.body.notification.canonStatus + '\\nChanged file: ' + $json.body.notification.relativePath + '\\nGit revision: ' + $json.body.notification.gitRevision + '\\nTransaction: ' + $json.body.notification.transactionId + '\\nCompleted: ' + $json.body.notification.completedAt + '\\n\\nThis message contains procedural details only; private story content is not included.' }}",
+        "options": { "appendAttribution": false }
       },
       "id": "b0e046d7-300e-4101-a673-f0d06ead2c1d",
       "name": "Email Archive Receipt",
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
-      "position": [80, -80],
-      "credentials": {
-        "smtp": {
-          "id": "granite-archive-notifications",
-          "name": "Granite Archive Notifications"
-        }
-      }
+      "position": [180, -80],
+      "credentials": { "smtp": { "id": "granite-archive-notifications", "name": "Granite Archive Notifications" } }
     },
     {
       "parameters": {
-        "errorMessage": "Completion email rejected: transaction is not succeeded or lacks its committed note ID/Git revision."
+        "method": "POST",
+        "url": "={{ $env.FEATHER_LIGHT_BASE_URL + '/v1/archive/notifications/' + $('Claim Completion Notification').item.json.body.notification.notificationId + '/sent' }}",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "={{ 'Bearer ' + $env.FEATHER_LIGHT_API_TOKEN }}" }] },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ workerId: $env.FEATHER_LIGHT_NOTIFICATION_WORKER_ID, occurredAt: $now.toISO() }) }}",
+        "options": { "response": { "response": { "fullResponse": true, "neverError": true } } }
       },
+      "id": "9f77b6c5-7904-43ac-b117-2aeb889ca455",
+      "name": "Acknowledge Receipt Sent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [420, -80]
+    },
+    {
+      "parameters": { "assignments": { "assignments": [{ "id": "bf160996-bb83-4321-b6db-c3a84767c629", "name": "status", "value": "no_pending_notifications", "type": "string" }] }, "options": {} },
       "id": "4c559788-37de-4661-8ed9-b45984f59943",
-      "name": "Reject Premature Notification",
-      "type": "n8n-nodes-base.stopAndError",
-      "typeVersion": 1,
-      "position": [80, 100]
+      "name": "No Pending Notifications",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [180, 100]
     }
   ],
   "pinData": {},
   "connections": {
-    "Receive Completed Transaction": {
-      "main": [[{"node": "Verified Archive Success?", "type": "main", "index": 0}]]
-    },
-    "Verified Archive Success?": {
-      "main": [
-        [{"node": "Email Archive Receipt", "type": "main", "index": 0}],
-        [{"node": "Reject Premature Notification", "type": "main", "index": 0}]
-      ]
-    }
+    "Poll Notification Outbox": { "main": [[{ "node": "Claim Completion Notification", "type": "main", "index": 0 }]] },
+    "Claim Completion Notification": { "main": [[{ "node": "Notification Claimed?", "type": "main", "index": 0 }]] },
+    "Notification Claimed?": { "main": [[{ "node": "Email Archive Receipt", "type": "main", "index": 0 }], [{ "node": "No Pending Notifications", "type": "main", "index": 0 }]] },
+    "Email Archive Receipt": { "main": [[{ "node": "Acknowledge Receipt Sent", "type": "main", "index": 0 }]] }
   },
   "active": false,
-  "settings": {
-    "executionOrder": "v1"
-  },
+  "settings": { "executionOrder": "v1" },
   "versionId": "b7888964-a6f3-46b8-86ce-c078869da093",
-  "meta": {
-    "templateCredsSetupCompleted": false
-  },
+  "meta": { "templateCredsSetupCompleted": false },
   "tags": []
 }

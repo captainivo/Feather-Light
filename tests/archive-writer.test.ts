@@ -64,5 +64,12 @@ describe("approved archive writer", () => {
     expect(result.gitCommit).toMatch(/^[a-f0-9]{40}$/);
     expect(git(state.root, "show", "--format=", "--name-only", "HEAD")).toBe("Characters/Example.md");
     expect(getArchiveTransaction(state.database, state.transactionId)).toMatchObject({ status: "succeeded", gitCommit: result.gitCommit });
+    const outbox = state.database.prepare("SELECT payload_json, sent_at FROM archive_notification_outbox WHERE transaction_id=?")
+      .get(state.transactionId) as { payload_json: string; sent_at: string | null };
+    expect(JSON.parse(outbox.payload_json)).toMatchObject({
+      transactionStatus: "succeeded", noteId: "person-example-001", noteTitle: "Example",
+      relativePath: "Characters/Example.md", gitRevision: result.gitCommit,
+    });
+    expect(outbox.sent_at).toBeNull();
   });
 });

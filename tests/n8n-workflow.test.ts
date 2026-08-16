@@ -54,18 +54,20 @@ describe("versioned n8n workflows", () => {
     };
     expect(workflow.active).toBe(false);
     expect(workflow.nodes.map((node) => node.name)).toEqual([
-      "Receive Completed Transaction", "Verified Archive Success?", "Email Archive Receipt", "Reject Premature Notification",
+      "Poll Notification Outbox", "Claim Completion Notification", "Notification Claimed?",
+      "Email Archive Receipt", "Acknowledge Receipt Sent", "No Pending Notifications",
     ]);
     const email = workflow.nodes.find((node) => node.name === "Email Archive Receipt")!;
     expect(email.credentials?.smtp).toEqual({ id: "granite-archive-notifications", name: "Granite Archive Notifications" });
     expect(raw).toContain("ARCHIVE_NOTIFICATION_FROM");
     expect(raw).toContain("ARCHIVE_NOTIFICATION_EMAIL");
-    expect(raw).toContain("transaction_status");
-    expect(raw).toContain("git_revision");
+    expect(raw).toContain("/v1/archive/notifications/claim");
+    expect(raw).toContain("FEATHER_LIGHT_NOTIFICATION_WORKER_ID");
+    expect(raw).toContain("gitRevision");
     expect(raw).toContain("private story content is not included");
     expect(raw).not.toContain("content }}");
     expect(raw).not.toMatch(/@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
-    expect(workflow.connections).not.toHaveProperty("Email Archive Receipt");
+    expect(workflow.connections).toHaveProperty("Email Archive Receipt");
   });
 
   it("keeps exact proposal review and approval behind authenticated n8n intake", () => {

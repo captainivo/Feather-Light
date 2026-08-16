@@ -29,6 +29,7 @@ import {
   listInfluenceDecisions,
   listInfluencePolicies,
 } from "./influence.js";
+import { acknowledgeArchiveCompletionNotification, claimNextArchiveCompletionNotification } from "./archive-notifications.js";
 
 const responseView = z.enum(["brief", "standard"]).default("brief");
 
@@ -128,6 +129,27 @@ export function buildServer(config: Config, database: FeatherDatabase) {
     } catch (error) {
       if (error instanceof z.ZodError) return reply.code(400).send({ status: "invalid_request", error: error.issues });
       return reply.code(409).send({ status: "claim_rejected", error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.post("/v1/archive/notifications/claim", async (request, reply) => {
+    try {
+      const notification = claimNextArchiveCompletionNotification(database, request.body);
+      return notification ? { status: "claimed", notification } : reply.code(204).send();
+    } catch (error) {
+      if (error instanceof z.ZodError) return reply.code(400).send({ status: "invalid_request", error: error.issues });
+      return reply.code(409).send({ status: "claim_rejected", error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+  app.post("/v1/archive/notifications/:notificationId/sent", async (request, reply) => {
+    const params = z.object({ notificationId: z.string().min(1).max(120) }).strict().safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ status: "invalid_request", error: params.error.issues });
+    try {
+      const notification = acknowledgeArchiveCompletionNotification(database, params.data.notificationId, request.body);
+      return { status: "sent", notification_id: notification.notificationId, transaction_id: notification.transactionId };
+    } catch (error) {
+      if (error instanceof z.ZodError) return reply.code(400).send({ status: "invalid_request", error: error.issues });
+      const message = error instanceof Error ? error.message : String(error);
+      return reply.code(message.startsWith("unknown archive notification") ? 404 : 409).send({ status: "acknowledgement_rejected", error: message });
     }
   });
   app.get("/v1/archive/transactions/:transactionId", async (request, reply) => {

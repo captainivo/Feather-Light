@@ -50,6 +50,6 @@ describe("migration integrity", () => {
     expect(database.prepare(
       "SELECT request_id,payload_hash,adopts_request_id FROM influence_decisions WHERE request_id='v22-review'",
     ).get()).toEqual({ request_id: "v22-review", payload_hash: null, adopts_request_id: null });
-    expect(database.prepare("SELECT max(version) AS version FROM schema_migrations").get()).toEqual({ version: 23 });
+    expect(database.prepare("SELECT max(version) AS version FROM schema_migrations").get()).toEqual({ version: 24 });
   });
 });

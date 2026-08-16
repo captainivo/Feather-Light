@@ -39,21 +39,21 @@ hash is rejected by Feather-Light. This workflow never edits Markdown and cannot
 
 ## Completion email
 
-`story-archive-completion-email.json` is a reusable sub-workflow for the final successful branch of
-the future canonical-write worker. It refuses to send unless the input says `transaction_status:
-"succeeded"` and includes both `note_id` and `git_revision`. The receipt contains procedural details
-only—title, permanent ID, operation, canon status, changed path, Git revision, transaction ID, and
-completion time—and never includes private story content.
+`story-archive-completion-email.json` polls Feather-Light's durable, body-free notification outbox.
+The restricted archive writer enqueues a receipt in the same database transaction that finalizes a
+successful write. n8n leases one receipt, sends it, and acknowledges it only after SMTP succeeds.
+The receipt contains procedural details only—title, permanent ID, operation, canon status, changed
+path, Git revision, transaction ID, and completion time—and never includes private story content.
 
 Before use, create an n8n **SMTP** credential named `Granite Archive Notifications`, attach it to the
 email node after import, and configure:
 
 - `ARCHIVE_NOTIFICATION_FROM`, the sender address accepted by the SMTP account;
 - `ARCHIVE_NOTIFICATION_EMAIL`, the private destination address.
+- `FEATHER_LIGHT_NOTIFICATION_WORKER_ID`, a stable non-secret identifier for the email worker.
 
-Keep the workflow inactive until a synthetic `succeeded` payload sends one correct test message and
-a non-success payload is rejected. The canonical worker must invoke it only after the note write,
-ledger finalization, and Git commit all succeed.
+Keep the workflow inactive until a synthetic outbox receipt sends one correct test message. A
+receipt is created only after the note write, ledger finalization, and Git commit all succeed.
 
 ## Queue worker
 

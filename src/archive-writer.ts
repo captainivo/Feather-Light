@@ -10,6 +10,7 @@ import { sha256 } from "./hash.js";
 import { parseMarkdown } from "./markdown.js";
 import { storyNoteMetadataSchema } from "./story-archive-contract.js";
 import { assertArchiveWriterLease } from "./archive-writer-queue.js";
+import { enqueueArchiveCompletionNotification } from "./archive-notifications.js";
 
 export interface ArchiveWriteAuthorization {
   allowWrite: true;
@@ -139,6 +140,17 @@ export function applyApprovedArchiveProposal(
       transitionArchiveTransaction(database, authorization.transactionId, {
         status: "succeeded", occurredAt: authorization.occurredAt,
         summary: `${proposal.operation} ${proposal.note.id} committed at ${proposal.note.relativePath}.`, gitCommit,
+      });
+      enqueueArchiveCompletionNotification(database, {
+        transactionId: authorization.transactionId,
+        transactionStatus: "succeeded",
+        noteId: proposal.note.id,
+        noteTitle: proposal.note.title,
+        mode: transaction.mode,
+        canonStatus: proposal.note.status,
+        relativePath: proposal.note.relativePath,
+        gitRevision: gitCommit,
+        completedAt: authorization.occurredAt,
       });
     })();
     if (existed) rmSync(backup);

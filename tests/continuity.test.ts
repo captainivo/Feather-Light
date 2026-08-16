@@ -70,7 +70,7 @@ describe("continuity manifest", () => {
       status: "verified",
       artifacts: [{ id: "foundation", required: true, immutable: true, status: "verified" }],
     });
-    expect(manifest.components.migrations).toMatchObject({ status: "verified", appliedVersion: 23, appliedCount: 23 });
+    expect(manifest.components.migrations).toMatchObject({ status: "verified", appliedVersion: 24, appliedCount: 24 });
     expect(manifest.components.archive).toMatchObject({ status: "verified", roots: [{ id: "canonical", status: "indexed" }] });
     expect(manifest.components.environment).toMatchObject({ status: "verified", current: { absoluteDay: 4 } });
     expect(manifest.components.writableStores).toMatchObject({ status: "verified" });

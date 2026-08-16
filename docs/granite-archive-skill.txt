@@ -1,0 +1,127 @@
+GRANITE ARCHIVE — MITHRA/HERMES SKILL
+Version 0.1.0
+
+Purpose
+=======
+
+Granite Archive is the careful writing boundary for the private Westpole archive. Feather-Light is
+the authority for validation, durable transactions, and archive state. n8n is the orchestrator.
+Never treat a successful intake response as proof that canon was written.
+
+Use this skill for capture, archive, update, retcon, discard, or archive-transaction status
+requests. Do not use it for ordinary brainstorming or read-only lore searches.
+
+Choose the operation
+====================
+
+- capture: Preserve supplied material in the durable development ledger without claiming canon.
+- archive: Propose a new archive note.
+- update: Propose changes to one or more existing permanent IDs.
+- retcon: Explicitly replace or contradict earlier canon; always name the affected IDs.
+- discard: Propose removal from active canon while retaining provenance.
+- develop: Remain in conversation; do not submit unless the author explicitly asks to capture it.
+- lookup or report: Use Feather-Light's read tool rather than creating a write transaction.
+
+Workflow
+========
+
+1. Preserve the author's wording and distinguish stated fact from inference.
+2. Resolve existing permanent IDs with Feather-Light before update, retcon, or discard.
+3. Ask only questions whose answers could change identity, canon status, target IDs, or meaning.
+4. For a new archive note, resolve and show the permanent ID, note type, primary and secondary
+   categories, relative Markdown path, regions, eras, aliases, requested status, subject, and exact
+   content. Put that approved identity in metadata.archive_note; n8n must not infer it.
+5. Show a compact intake proposal containing mode, requested status, subject, targets, categories,
+   and the exact content to preserve. Obtain explicit author approval before submission.
+6. Write only the normalized JSON request to a temporary file with owner-only permissions. Do not
+   place story content or credentials in shell arguments, logs, chat summaries, or Git.
+7. Run scripts/archivectl validate REQUEST.json. If it succeeds, run
+   scripts/archivectl submit REQUEST.json.
+8. Report the returned transaction_id and transaction_status. Say "queued" or "accepted", never
+   "archived", until the transaction reaches succeeded and the result identifies the committed
+   note and Git revision.
+9. Delete the temporary request file after submission unless the author asks to retain it locally.
+
+Exact proposal approval
+=======================
+
+After n8n prepares a proposal, run scripts/archivectl review TRANSACTION_ID and show the author the
+complete returned note content, relative path, operation, canon status, and proposalHash. Never
+summarize away a difference before approval. Only after the author explicitly approves that exact
+displayed proposal, run scripts/archivectl approve TRANSACTION_ID PROPOSAL_HASH. If the hash or
+transaction differs, stop. Approval means the restricted writer may commit immediately.
+
+If validation, authentication, or n8n fails, stop and report the exact bounded error. Never bypass
+the n8n intake by editing the Westpole vault, SQLite ledger, or Git repository directly.
+
+Secret boundary
+===============
+
+The client reads its webhook key from GRANITE_ARCHIVE_TOKEN_FILE (default:
+~/.config/granite-archive/webhook-token) and its endpoint from GRANITE_ARCHIVE_WEBHOOK_URL or the
+default ~/.config/granite-archive/webhook-url file. Never print or copy either value into notes, and
+never commit the key. The public key fingerprint used for Mithra's source-maintenance checkout is
+unrelated and cannot authenticate archive submissions.
+
+Archive policy
+==============
+
+- The Westpole archive is private and must never be committed to the Feather-Light source
+  repository.
+- Author intent is authoritative. Do not silently upgrade draft, probable, speculative, or
+  contradicted material to canon.
+- Preserve detail. Summarize only for the proposal; put the full approved material in content.
+- Resolve aliases to permanent IDs before proposing changes to an existing subject.
+- Surface contradictions. A retcon must be explicit and must retain procedural provenance.
+- capture records material for later development; it is not a canonical archive write.
+- Submission acceptance means only that Feather-Light durably queued the request.
+- Mechanical facts—including timestamps, hashes, diffs, event IDs, filenames, and Git
+  revisions—are produced or verified by Feather-Light and must not be invented by the assistant.
+- Never edit archive Markdown, the ledger database, or archive Git history outside the approved
+  transaction pipeline.
+
+Submission contract
+===================
+
+Send one strict JSON object with these fields:
+
+{
+  "submission_id": "mithra-unique-id",
+  "mode": "capture",
+  "source_client": "mithra-hermes",
+  "submitted_at": "2026-08-10T12:00:00-07:00",
+  "content": "The exact author-approved material.",
+  "requested_status": "draft",
+  "primary_subject": "Optional display name",
+  "targets": [],
+  "categories": [],
+  "metadata": {
+    "archive_note": {
+      "id": "person-example-001",
+      "type": "person",
+      "primary_category": "character",
+      "secondary_categories": [],
+      "relative_path": "Characters/Example.md",
+      "regions": [],
+      "eras": [],
+      "aliases": []
+    }
+  }
+}
+
+Allowed modes: capture, develop, archive, update, retcon, discard, lookup, report.
+
+Allowed statuses: canon, probable, draft, speculative, contradicted, retconned, discarded.
+
+source_client and categories are lowercase slugs. Target IDs are lowercase hyphenated permanent
+IDs. update and retcon require at least one target. Write-oriented modes require non-empty content.
+Use a genuinely unique, stable submission_id. Retrying identical JSON with the same ID is safe;
+reusing an ID for different content is rejected.
+
+The client validates locally before contacting n8n, but Feather-Light performs authoritative
+validation and durable idempotency checks.
+
+New archive submissions require primary_subject plus the complete metadata.archive_note object
+shown above. These fields are part of the author-reviewed proposal intent; n8n must never invent
+them. Feather-Light renders the exact Markdown and proposal hash after the worker claim, and that
+exact result requires separate author approval before any writer can commit it.
