@@ -68,6 +68,12 @@ mounted read-only during this rehearsal, but no ingest or migration is triggered
 Production exposure must use `config.container.yaml` with a separately mounted token file; the
 rehearsal config must never be paired with a published port.
 
+The Unraid production manifest does not generate secrets at container startup. Before the first
+production start, `/mnt/user/appdata/feather-light-secrets/feather-light-api-token` must already
+exist, contain a non-empty random token, be owned by UID 1000, and have mode `0600`. Feather-Light
+fails closed when that file is absent or empty. Keeping this one-time host provisioning outside
+Compose avoids a permanently visible exited setup container and prevents accidental token rotation.
+
 ## Restricted archive writer
 
 Approved canon changes are applied by a separate `archive-writer` service. It shares only the

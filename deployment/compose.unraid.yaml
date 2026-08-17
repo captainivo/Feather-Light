@@ -1,26 +1,6 @@
 name: feather_light
 
 services:
-  token-setup:
-    image: alpine:3.22
-    container_name: Feather-Light-Token-Setup
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - >-
-        if [ ! -s /secrets/feather-light-api-token ]; then
-          umask 077;
-          head -c 48 /dev/urandom | base64 > /secrets/feather-light-api-token;
-          chown 1000:1000 /secrets/feather-light-api-token;
-          chmod 600 /secrets/feather-light-api-token;
-        fi;
-        cp /source-icon /unraid-images/Feather-Light-icon.png;
-        chmod 644 /unraid-images/Feather-Light-icon.png
-    volumes:
-      - /mnt/user/appdata/feather-light-secrets:/secrets
-      - /mnt/user/appdata/feather-light-source/assets/feather-light-icon.png:/source-icon:ro
-      - /var/lib/docker/unraid/images:/unraid-images
-    restart: "no"
-
   aauthora-tunnel:
     container_name: Feather-Light-Aauthora-Tunnel
     build:
@@ -73,8 +53,6 @@ services:
     restart: unless-stopped
     init: true
     depends_on:
-      token-setup:
-        condition: service_completed_successfully
       aauthora-tunnel:
         condition: service_healthy
     labels:

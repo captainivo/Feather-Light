@@ -100,7 +100,7 @@ describe("container packaging", () => {
       services: Record<string, { profiles?: string[]; network_mode?: string; working_dir?: string; volumes?: Array<string | Record<string, unknown>> }>;
     };
     expect(compose.name).toBe("feather_light");
-    expect(compose.services["token-setup"]).toBeDefined();
+    expect(compose.services["token-setup"]).toBeUndefined();
     expect(compose.services["archive-writer"]?.profiles).toEqual(["archive-write"]);
     expect(compose.services["archive-writer"]?.network_mode).toBe("none");
     expect(compose.services["archive-writer"]?.working_dir).toBe("/app/granite-wing");
