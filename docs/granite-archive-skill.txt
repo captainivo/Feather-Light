@@ -30,7 +30,8 @@ Workflow
 3. Ask only questions whose answers could change identity, canon status, target IDs, or meaning.
 4. For a new archive note, resolve and show the permanent ID, note type, primary and secondary
    categories, relative Markdown path, regions, eras, aliases, requested status, subject, and exact
-   content. Put that approved identity in metadata.archive_note; n8n must not infer it.
+   content. Confirm that the relative path's parent folder already exists in the configured archive
+   root. Put that approved identity in metadata.archive_note; n8n must not infer it.
 5. Show a compact intake proposal containing mode, requested status, subject, targets, categories,
    and the exact content to preserve. Obtain explicit author approval before submission.
 6. Write only the normalized JSON request to a temporary file with owner-only permissions. Do not

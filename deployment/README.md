@@ -84,5 +84,20 @@ These examples are intended for an interactive single-user VM. On a multi-user h
 header through curl configuration on standard input, as `deployment/install.sh` does, so the token
 does not appear in process arguments.
 
+## Token and archive boundaries during migration
+
+The VM and the Unraid `Feather-Light` container are separate API trust domains while both copies
+remain online. `~/.config/feather-light/api-token` authenticates the VM service only. The Unraid
+container reads its own token from `/mnt/user/appdata/feather-light-secrets/feather-light-api-token`;
+n8n receives that value through its private container configuration. A `401` caused by presenting
+one service's token to the other does not imply that either token is stale. Never copy either token
+into Git, documentation, chat, a shell argument, or the Westpole archive.
+
+The canonical Westpole directory on Unraid contains a local-only Git repository so the restricted
+archive writer can make path-scoped commits and provide rollback provenance. This repository must
+have no remote configured. It is unrelated to the Feather-Light source repository and must never
+be pushed to GitHub. Verify the boundary interactively with
+`git -C "/mnt/user/Documents/The Westpole" remote -v`; correct production output is empty.
+
 Before activation, verify the configured archive path exists and is the intended canonical,
 read-only root. An unavailable root must produce a failed ingest without deleting indexed data.

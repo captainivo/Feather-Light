@@ -1,5 +1,8 @@
 import { stringify as stringifyYaml } from "yaml";
+import { realpathSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
 import { z } from "zod";
+import type { Config } from "./config.js";
 import type { FeatherDatabase } from "./database.js";
 import { prepareArchiveTransactionProposal, type ArchiveTransactionProposal } from "./archive-proposals.js";
 import { getClaimedArchiveTransactionWork } from "./archive-transactions.js";
@@ -29,12 +32,27 @@ export function deriveNewArchiveProposal(
   database: FeatherDatabase,
   transactionId: string,
   value: unknown,
+  archiveRoots?: Config["archiveRoots"],
 ): ArchiveTransactionProposal {
   const input = deriveNewProposalInputSchema.parse(value);
   const { request } = getClaimedArchiveTransactionWork(database, transactionId, input.workerId);
   if (request.mode !== "archive") throw new Error("deterministic new-note derivation requires archive mode");
   if (!request.primary_subject) throw new Error("new-note derivation requires primary_subject");
   const intent = archiveNoteIntentSchema.parse(request.metadata.archive_note);
+  if (archiveRoots) {
+    const root = archiveRoots.find((candidate) => candidate.enabled && candidate.rootId === input.rootId);
+    if (!root) throw new Error(`unknown or disabled archive root: ${input.rootId}`);
+    const rootPath = realpathSync(root.path);
+    let parentPath: string;
+    try {
+      parentPath = realpathSync(dirname(join(rootPath, intent.relative_path)));
+    } catch {
+      throw new Error(`archive note parent directory does not exist: ${dirname(intent.relative_path)}`);
+    }
+    if (parentPath !== rootPath && relative(rootPath, parentPath).startsWith("..")) {
+      throw new Error("archive proposal parent escapes root");
+    }
+  }
   const categories = [intent.primary_category, ...intent.secondary_categories];
   if (new Set(categories).size !== categories.length) throw new Error("archive note categories must be unique");
   const frontmatter = {

@@ -188,3 +188,16 @@ The private key must never be copied into documentation, chat, Git, the archive,
 on a named branch, commit changes as Mithra, and push the branch for review. Editing this checkout
 does not silently modify the running VM service or the Unraid container; deployment remains a
 separate, deliberate operation.
+
+Archive privacy and API key scope
+
+The canonical Westpole archive on Flying-Battery has its own local-only Git history for safe,
+path-scoped archive commits and rollback. It has no Git remote and must never be pushed to GitHub.
+This archive history is separate from your editable Feather-Light source checkout and its deploy
+key.
+
+While the VM and Unraid copies coexist, their Feather-Light bearer tokens are deliberately
+different. Your ~/.config/feather-light/api-token authenticates the VM service only. n8n uses the
+Unraid container's private token. Do not transfer, print, document, or reuse either token across
+those trust domains; migration will replace the endpoint and token together as one deliberate
+cutover.

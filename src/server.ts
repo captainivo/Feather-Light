@@ -186,7 +186,10 @@ export function buildServer(config: Config, database: FeatherDatabase) {
     const params = z.object({ transactionId: z.string().min(1) }).strict().safeParse(request.params);
     if (!params.success) return reply.code(400).send({ status: "invalid_request", error: params.error.issues });
     try {
-      return reply.code(201).send({ status: "prepared", ...deriveNewArchiveProposal(database, params.data.transactionId, request.body) });
+      return reply.code(201).send({
+        status: "prepared",
+        ...deriveNewArchiveProposal(database, params.data.transactionId, request.body, config.archiveRoots),
+      });
     } catch (error) {
       if (error instanceof z.ZodError) return reply.code(400).send({ status: "invalid_request", error: error.issues });
       const message = error instanceof Error ? error.message : String(error);
